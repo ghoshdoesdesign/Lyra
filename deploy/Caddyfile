@@ -1,0 +1,5 @@
+# Public HTTPS for the Lyra server. Caddy obtains the TLS certificate
+# automatically. {{LYRA_DOMAIN}} is filled in by deploy/setup.sh.
+{{LYRA_DOMAIN}} {
+	reverse_proxy 127.0.0.1:7001
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Lyra voice bridge (AirPods → OpenClaw)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=lyra
+Group=lyra
+Environment=HOME=/home/lyra
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/lyra/lyra.env
+WorkingDirectory=/home/lyra
+ExecStart=/usr/local/bin/uv run --script /opt/lyra/lyra_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

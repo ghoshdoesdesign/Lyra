@@ -1,0 +1,93 @@
+# Lyra
+
+Talk to your own AI agent through your AirPods. Say **"Hey Siri, it's showtime"**, then just talk; Lyra answers in your ears.
+
+Lyra is adapted from [ClawPod](https://github.com/algal/clawpod) (a HomePod → OpenClaw bridge), with three changes:
+
+- **AirPods instead of HomePod.** The Shortcut runs on your iPhone directly, so none of HomePod's Personal Content setup is needed.
+- **Always on.** OpenClaw and Lyra run on a small cloud server, so they keep working when your laptop is off, asleep or out of battery.
+- **Secure by default.** It uses HTTPS and requires a bearer token, because the server is reachable from anywhere.
+
+## How it works
+
+```
+AirPods: "Hey Siri, it's showtime"
+    ↓
+iOS Shortcut "It's Showtime" (on your iPhone): Siri listens, speech → text
+    ↓  HTTPS POST /chat {text, speaker} + bearer token
+Cloud VPS (always on)
+    ├─ Caddy: HTTPS, auto TLS certificate
+    ├─ Lyra server (server/lyra_server.py)
+    │     └─ openclaw agent --session-key airpods-<you> ...
+    └─ OpenClaw Gateway (systemd service, Anthropic API key)
+    ↓
+{reply, end_conversation} → Siri speaks the reply in your AirPods → loop
+```
+
+## Setup (about 20 minutes)
+
+### 1. Get a server and an API key
+- **VPS:** any Ubuntu 24.04 server with 2 GB+ RAM and a public IP. For example Hetzner CX22 (~€4/mo) or a DigitalOcean 2 GB droplet (~$12/mo). If the provider has its own firewall, allow inbound **TCP 22, 80 and 443**.
+- **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com).
+
+### 2. Install everything on the server
+
+```bash
+ssh root@<your-server-ip>
+git clone https://github.com/ghoshdoesdesign/lyra.git
+cd lyra
+ANTHROPIC_API_KEY=sk-ant-... ./deploy/setup.sh
+```
+
+The script installs Node 24, OpenClaw, uv, Caddy and a firewall. It onboards OpenClaw with your key and starts everything as services that restart on reboot. At the end it prints:
+
+```
+Server URL : https://203-0-113-7.sslip.io
+API token  : 3f9c...
+```
+
+The URL uses [sslip.io](https://sslip.io), so you get working HTTPS without buying a domain. To use your own domain, point a DNS A record at the server and run with `LYRA_DOMAIN=lyra.example.com`.
+
+If the repo is private, copy it to the server instead of cloning: `scp -r . root@<ip>:lyra`.
+
+### 3. Test it from any computer
+
+```bash
+LYRA_URL=https://<server-url> LYRA_API_TOKEN=<token> uv run server/test_client.py
+```
+
+### 4. Set up the iPhone Shortcut
+Follow [SHORTCUT.md](SHORTCUT.md) to create the **"It's Showtime"** Shortcut with your server URL and token.
+
+### 5. Use it
+With AirPods in, say **"Hey Siri, it's showtime."** Lyra greets you. Talk normally, and say **"goodbye"** or **"that's all"** when you're done.
+
+## Operating the server
+
+| Task | Command (on the VPS) |
+|---|---|
+| Lyra logs | `journalctl -u lyra -f` |
+| OpenClaw Gateway logs | `sudo -iu lyra journalctl --user -u openclaw-gateway -f` |
+| OpenClaw status | `sudo -iu lyra openclaw status` |
+| Update OpenClaw + Lyra | `git pull && ./deploy/setup.sh` |
+| Show the API token | `grep TOKEN /etc/lyra/lyra.env` |
+| Rotate the token | edit `/etc/lyra/lyra.env`, then `systemctl restart lyra` (and update the Shortcut) |
+
+OpenClaw's state (agent memory, sessions, persona files) lives in `/home/lyra/.openclaw/` on the server. Back it up occasionally.
+
+## Configuration
+
+Set these in `/etc/lyra/lyra.env` on the server:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LYRA_API_TOKEN` | (generated) | Bearer token the Shortcut must send (required) |
+| `LYRA_AGENT` | `main` | OpenClaw agent id |
+| `LYRA_TIMEOUT` | `45` | Seconds per agent turn (Siri gives up on slow requests) |
+| `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
+| `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
+
+## Limitations
+- The phrase is **"Hey Siri, it's showtime"**, not "Hey Lyra". iOS doesn't allow custom wake words without an app.
+- **Siri may confuse the name.** It might mistake "it's showtime" for the Showtime or Paramount+ app or a song. If so, rename the Shortcut to something more distinctive (e.g. "Lyra showtime").
+- **Turns are capped at 45 seconds.** Long tasks such as bookings that take minutes need a follow-up feature (background jobs plus a notification), which isn't built yet.
