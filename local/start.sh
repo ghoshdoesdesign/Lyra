@@ -75,6 +75,8 @@ if [[ ! -f "$HOME/.openclaw/openclaw.json" ]]; then
 
   # The Gateway is installed as a background service (launchd on macOS,
   # systemd on Linux) and starts again when you log in.
+  # --skip-health: the Gateway can take longer than onboarding's own probe to
+  # come up on first start; we wait for it ourselves below.
   log "Setting up OpenClaw with your $PROVIDER key"
   openclaw onboard --non-interactive --accept-risk \
     --mode local \
@@ -82,8 +84,35 @@ if [[ ! -f "$HOME/.openclaw/openclaw.json" ]]; then
     --gateway-bind loopback \
     --install-daemon \
     --daemon-runtime node \
-    --skip-skills
+    --skip-skills \
+    --skip-health
 fi
+
+# --- Make sure the OpenClaw Gateway is up ------------------------------------
+
+GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+gateway_up() { (echo > "/dev/tcp/127.0.0.1/$GATEWAY_PORT") 2>/dev/null; }
+wait_for_gateway() {
+  for _ in $(seq 1 "$1"); do gateway_up && return 0; sleep 2; done
+  return 1
+}
+
+if ! gateway_up; then
+  log "Waiting for the OpenClaw Gateway to start"
+  if ! wait_for_gateway 30; then
+    log "Gateway still not up; restarting it"
+    openclaw gateway restart || true
+    if ! wait_for_gateway 45; then
+      GATEWAY_LOG="$HOME/Library/Logs/openclaw/gateway.log"
+      if [[ -f "$GATEWAY_LOG" ]]; then
+        printf '\nLast lines of %s:\n' "$GATEWAY_LOG"
+        tail -n 25 "$GATEWAY_LOG"
+      fi
+      die "the OpenClaw Gateway isn't running. Run 'openclaw gateway status --deep' and send the output."
+    fi
+  fi
+fi
+echo "OpenClaw Gateway is running on port $GATEWAY_PORT."
 
 # --- Lyra config --------------------------------------------------------------
 

@@ -119,10 +119,20 @@ if (( FIRST_ONBOARD )); then
     --gateway-bind loopback \
     --install-daemon \
     --daemon-runtime node \
-    --skip-skills
+    --skip-skills \
+    --skip-health
 else
   log "OpenClaw already onboarded; restarting Gateway"
   as_lyra systemctl --user restart openclaw-gateway.service || true
+fi
+
+# The Gateway can take a while on first start; wait (and retry once).
+gateway_up() { (echo > /dev/tcp/127.0.0.1/18789) 2>/dev/null; }
+wait_for_gateway() { for _ in $(seq 1 "$1"); do gateway_up && return 0; sleep 2; done; return 1; }
+if ! wait_for_gateway 30; then
+  log "Gateway not up yet; restarting it"
+  as_lyra openclaw gateway restart || true
+  wait_for_gateway 45 || die "OpenClaw Gateway isn't running; check: sudo -iu $LYRA_USER journalctl --user -u openclaw-gateway -n 50"
 fi
 
 # --- Lyra server --------------------------------------------------------------
