@@ -3,6 +3,7 @@
 # Lyra v1: run everything on your laptop (macOS or Linux).
 #
 #   ./local/start.sh            # phone must be on the same Wi-Fi as the laptop
+#   ./local/start.sh --new-key  # ask for a (new) API key even if one is set
 #   ./local/start.sh --tunnel   # also reachable over cellular, via a free
 #                               # Cloudflare quick tunnel (URL changes each run)
 #
@@ -17,7 +18,14 @@ LYRA_DIR="$HOME/.lyra"
 ENV_FILE="$LYRA_DIR/lyra.env"
 PORT="${LYRA_PORT:-7001}"
 TUNNEL=0
-[[ "${1:-}" == "--tunnel" ]] && TUNNEL=1
+NEW_KEY=0
+for arg in "$@"; do
+  case "$arg" in
+    --tunnel)  TUNNEL=1 ;;
+    --new-key) NEW_KEY=1 ;;
+    *) echo "Unknown option: $arg (use --tunnel and/or --new-key)" >&2; exit 1 ;;
+  esac
+done
 
 log() { printf '\n\033[1;35m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mError: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -66,8 +74,18 @@ fi
 # `models status --check` exits 1 for missing auth, 0 when set, 2 when expiring.
 auth_status=0
 openclaw models status --check >/dev/null 2>&1 || auth_status=$?
-if [[ ! -f "$HOME/.openclaw/openclaw.json" || $auth_status -eq 1 ]]; then
-  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
+if (( NEW_KEY )) || [[ ! -f "$HOME/.openclaw/openclaw.json" || $auth_status -eq 1 ]]; then
+  MODEL_API_KEY=""
+  if (( ! NEW_KEY )); then
+    for var in LYRA_MODEL_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY; do
+      if [[ -n "${!var:-}" ]]; then
+        MODEL_API_KEY="${!var}"
+        echo "Using the API key from \$$var in your environment (ending …${MODEL_API_KEY: -4})."
+        echo "To enter a different key instead, run: ./local/start.sh --new-key"
+        break
+      fi
+    done
+  fi
   if [[ -z "$MODEL_API_KEY" ]]; then
     read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
   fi
@@ -91,6 +109,11 @@ if [[ ! -f "$HOME/.openclaw/openclaw.json" || $auth_status -eq 1 ]]; then
     --daemon-runtime node \
     --skip-skills \
     --skip-health
+fi
+
+if (( ! NEW_KEY )) && [[ $auth_status -ne 1 && -z "${PROVIDER:-}" ]]; then
+  echo "OpenClaw already has a model login configured; not asking for a key."
+  echo "(See it with: openclaw models status. Replace it with: ./local/start.sh --new-key)"
 fi
 
 # --- Make sure the OpenClaw Gateway is up ------------------------------------

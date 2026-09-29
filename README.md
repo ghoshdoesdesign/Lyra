@@ -41,6 +41,7 @@ On the first run it installs OpenClaw (and Node.js if needed), asks once for you
 | Command | Phone can reach Lyra | Server URL |
 |---|---|---|
 | `./local/start.sh` | Only on the same Wi-Fi as the laptop | `http://<your-mac>.local:7001` (stays the same) |
+| `./local/start.sh --new-key` | (Re-)enter your API key, e.g. after rotating it. Otherwise the script reuses an existing OpenClaw login or `$OPENAI_API_KEY`/`$ANTHROPIC_API_KEY` from your shell and says so | same as above |
 | `./local/start.sh --tunnel` | Anywhere, including cellular | `https://<random>.trycloudflare.com` (**changes every run**, so you'd update the Shortcut each time) |
 
 **Laptop-mode limits:**
