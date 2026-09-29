@@ -4,7 +4,10 @@
 # Ubuntu 24.04 VPS so Lyra runs 24/7, independent of your laptop.
 #
 # Usage (as root, from a checkout of this repo on the VPS):
-#   ANTHROPIC_API_KEY=sk-ant-... ./deploy/setup.sh
+#   ./deploy/setup.sh
+# On first run it asks for one API key (OpenAI "sk-..." or Anthropic
+# "sk-ant-...") and detects which provider it belongs to. You can also pass
+# it non-interactively: LYRA_MODEL_API_KEY=sk-... ./deploy/setup.sh
 #
 # Optional:
 #   LYRA_DOMAIN=lyra.example.com   use your own domain (DNS A record → this VPS);
@@ -32,10 +35,17 @@ LYRA_HOME="/home/$LYRA_USER"
 FIRST_ONBOARD=0
 if [[ ! -f "$LYRA_HOME/.openclaw/openclaw.json" ]]; then
   FIRST_ONBOARD=1
-  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    read -rsp "Anthropic API key (sk-ant-...): " ANTHROPIC_API_KEY; echo
+  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
+  if [[ -z "$MODEL_API_KEY" ]]; then
+    read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
   fi
-  [[ -n "$ANTHROPIC_API_KEY" ]] || die "ANTHROPIC_API_KEY is required for first-time setup"
+  MODEL_API_KEY="$(printf '%s' "$MODEL_API_KEY" | tr -d '[:space:]')"
+  [[ -n "$MODEL_API_KEY" ]] || die "an API key is required for first-time setup"
+  case "$MODEL_API_KEY" in
+    sk-ant-*) AUTH_ARGS=(--auth-choice apiKey --anthropic-api-key "$MODEL_API_KEY"); PROVIDER="Anthropic" ;;
+    sk-*)     AUTH_ARGS=(--auth-choice openai-api-key --openai-api-key "$MODEL_API_KEY"); PROVIDER="OpenAI" ;;
+    *)        die "unrecognized key format (expected sk-... for OpenAI or sk-ant-... for Anthropic)" ;;
+  esac
 fi
 
 if [[ -z "${LYRA_DOMAIN:-}" ]]; then
@@ -102,11 +112,10 @@ as_lyra() {
 # --- OpenClaw onboarding + Gateway daemon ------------------------------------
 
 if (( FIRST_ONBOARD )); then
-  log "Onboarding OpenClaw (Gateway on loopback, installed as a systemd user service)"
+  log "Onboarding OpenClaw with your $PROVIDER key (Gateway on loopback, systemd user service)"
   as_lyra openclaw onboard --non-interactive --accept-risk \
     --mode local \
-    --auth-choice apiKey \
-    --anthropic-api-key "$ANTHROPIC_API_KEY" \
+    "${AUTH_ARGS[@]}" \
     --gateway-bind loopback \
     --install-daemon \
     --daemon-runtime node \

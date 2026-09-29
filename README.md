@@ -19,7 +19,7 @@ Cloud VPS (always on)
     ├─ Caddy: HTTPS, auto TLS certificate
     ├─ Lyra server (server/lyra_server.py)
     │     └─ openclaw agent --session-key airpods-<you> ...
-    └─ OpenClaw Gateway (systemd service, Anthropic API key)
+    └─ OpenClaw Gateway (systemd service, OpenAI or Anthropic API key)
     ↓
 {reply, end_conversation} → Siri speaks the reply in your AirPods → loop
 ```
@@ -28,7 +28,7 @@ Cloud VPS (always on)
 
 ### 1. Get a server and an API key
 - **VPS:** any Ubuntu 24.04 server with 2 GB+ RAM and a public IP. For example Hetzner CX22 (~€4/mo) or a DigitalOcean 2 GB droplet (~$12/mo). If the provider has its own firewall, allow inbound **TCP 22, 80 and 443**.
-- **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com).
+- **An API key** from [OpenAI](https://platform.openai.com/api-keys) or [Anthropic](https://console.anthropic.com). Keep it out of the repo; the setup script asks for it.
 
 ### 2. Install everything on the server
 
@@ -36,10 +36,10 @@ Cloud VPS (always on)
 ssh root@<your-server-ip>
 git clone https://github.com/ghoshdoesdesign/lyra.git
 cd lyra
-ANTHROPIC_API_KEY=sk-ant-... ./deploy/setup.sh
+./deploy/setup.sh      # asks once for your API key (input hidden)
 ```
 
-The script installs Node 24, OpenClaw, uv, Caddy and a firewall. It onboards OpenClaw with your key and starts everything as services that restart on reboot. At the end it prints:
+The script installs Node 24, OpenClaw, uv, Caddy and a firewall. It detects whether the key is OpenAI or Anthropic, onboards OpenClaw with it (stored only on the server, in `/home/lyra/.openclaw/`), and starts everything as services that restart on reboot. At the end it prints:
 
 ```
 Server URL : https://203-0-113-7.sslip.io
