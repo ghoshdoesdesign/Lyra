@@ -32,21 +32,6 @@ grep -qi ubuntu /etc/os-release || die "this script targets Ubuntu 24.04"
 # --- Inputs -------------------------------------------------------------------
 
 LYRA_HOME="/home/$LYRA_USER"
-FIRST_ONBOARD=0
-if [[ ! -f "$LYRA_HOME/.openclaw/openclaw.json" ]]; then
-  FIRST_ONBOARD=1
-  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
-  if [[ -z "$MODEL_API_KEY" ]]; then
-    read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
-  fi
-  MODEL_API_KEY="$(printf '%s' "$MODEL_API_KEY" | tr -d '[:space:]')"
-  [[ -n "$MODEL_API_KEY" ]] || die "an API key is required for first-time setup"
-  case "$MODEL_API_KEY" in
-    sk-ant-*) AUTH_ARGS=(--auth-choice apiKey --anthropic-api-key "$MODEL_API_KEY"); PROVIDER="Anthropic" ;;
-    sk-*)     AUTH_ARGS=(--auth-choice openai-api-key --openai-api-key "$MODEL_API_KEY"); PROVIDER="OpenAI" ;;
-    *)        die "unrecognized key format (expected sk-... for OpenAI or sk-ant-... for Anthropic)" ;;
-  esac
-fi
 
 if [[ -z "${LYRA_DOMAIN:-}" ]]; then
   PUBLIC_IP="$(curl -4fsS --max-time 10 https://api.ipify.org || hostname -I | awk '{print $1}')"
@@ -111,7 +96,26 @@ as_lyra() {
 
 # --- OpenClaw onboarding + Gateway daemon ------------------------------------
 
-if (( FIRST_ONBOARD )); then
+ask_for_key() {
+  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
+  if [[ -z "$MODEL_API_KEY" ]]; then
+    read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
+  fi
+  MODEL_API_KEY="$(printf '%s' "$MODEL_API_KEY" | tr -d '[:space:]')"
+  [[ -n "$MODEL_API_KEY" ]] || die "an API key is required for first-time setup"
+  case "$MODEL_API_KEY" in
+    sk-ant-*) AUTH_ARGS=(--auth-choice apiKey --anthropic-api-key "$MODEL_API_KEY"); PROVIDER="Anthropic" ;;
+    sk-*)     AUTH_ARGS=(--auth-choice openai-api-key --openai-api-key "$MODEL_API_KEY"); PROVIDER="OpenAI" ;;
+    *)        die "unrecognized key format (expected sk-... for OpenAI or sk-ant-... for Anthropic)" ;;
+  esac
+}
+
+# Onboard whenever OpenClaw has no usable model credential (not just when the
+# config is missing). `models status --check`: 1 = missing auth, 0 = ok.
+auth_status=0
+as_lyra openclaw models status --check >/dev/null 2>&1 || auth_status=$?
+if [[ ! -f "$LYRA_HOME/.openclaw/openclaw.json" || $auth_status -eq 1 ]]; then
+  ask_for_key
   log "Onboarding OpenClaw with your $PROVIDER key (Gateway on loopback, systemd user service)"
   as_lyra openclaw onboard --non-interactive --accept-risk \
     --mode local \

@@ -61,7 +61,12 @@ if ! command -v openclaw >/dev/null; then
     || die "OpenClaw installed, but it's not on PATH yet. Open a new terminal and run this script again."
 fi
 
-if [[ ! -f "$HOME/.openclaw/openclaw.json" ]]; then
+# Ask for a key whenever OpenClaw has no usable model credential. (A config
+# file alone isn't enough: OpenClaw's installer can create one without a key.)
+# `models status --check` exits 1 for missing auth, 0 when set, 2 when expiring.
+auth_status=0
+openclaw models status --check >/dev/null 2>&1 || auth_status=$?
+if [[ ! -f "$HOME/.openclaw/openclaw.json" || $auth_status -eq 1 ]]; then
   MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
   if [[ -z "$MODEL_API_KEY" ]]; then
     read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
