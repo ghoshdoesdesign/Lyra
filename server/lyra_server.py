@@ -95,9 +95,15 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Response back to the iOS Shortcut."""
+    """
+    Response back to the iOS Shortcut.
+
+    end_conversation is only present (as true) when the conversation is over.
+    Shortcuts can't reliably compare JSON booleans, but it can always test
+    "Dictionary Value has any value", so absence means "keep going".
+    """
     reply: str
-    end_conversation: bool = False
+    end_conversation: bool | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -223,7 +229,7 @@ async def health():
     return {"status": "healthy", "service": "lyra"}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     """
     Process transcribed speech and return the agent's reply.
@@ -245,7 +251,7 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
         reply = "Goodbye!"
 
     logger.info(f"Response: end={end_conversation} reply={reply[:50]!r}")
-    return ChatResponse(reply=reply, end_conversation=end_conversation)
+    return ChatResponse(reply=reply, end_conversation=True if end_conversation else None)
 
 
 # -----------------------------------------------------------------------------

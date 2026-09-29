@@ -33,7 +33,7 @@ Open **Shortcuts → +**, name it **It's Showtime**, and add these actions:
    3. **Get Dictionary Value**: key `reply` from *Contents of URL*
    4. **Speak Text**: *Dictionary Value* (Wait Until Finished: on)
    5. **Get Dictionary Value**: key `end_conversation` from *Contents of URL*
-   6. **If** *Dictionary Value* **is** `true` → **Stop This Shortcut**
+   6. **If** *Dictionary Value* **has any value** → **Stop This Shortcut** (Lyra only sends `end_conversation` when the conversation is over; Shortcuts can't reliably compare JSON `true`, but "has any value" always works)
 
 When Siri runs the Shortcut hands-free, "Ask for Input" becomes a spoken prompt, and you answer by voice.
 

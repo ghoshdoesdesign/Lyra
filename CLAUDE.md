@@ -19,3 +19,4 @@ Voice access to an OpenClaw agent through AirPods, adapted from https://github.c
 - The server is internet-facing: keep bearer-token auth mandatory (`LYRA_API_TOKEN`).
 - `openclaw agent --json` returns top-level `payloads`; `extract_reply` also accepts the older `result.payloads` shape.
 - The agent signals the end of a conversation with the `[END]` marker, which is stripped before speaking.
+- `/chat` includes `end_conversation: true` only when the conversation is over and omits it otherwise; the Shortcut tests it with "has any value" (Shortcuts can't reliably compare JSON booleans). Keep it that way.
