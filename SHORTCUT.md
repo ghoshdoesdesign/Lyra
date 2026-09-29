@@ -2,14 +2,14 @@
 
 This iPhone Shortcut is what Siri runs when you say **"Hey Siri, it's showtime"**. It loops: listen → send to Lyra → speak the reply, until Lyra says the conversation is over.
 
-You need the **Server URL** and **API token** printed by `deploy/setup.sh`.
+You need the **Server URL** and **API token** printed by `local/start.sh` (laptop) or `deploy/setup.sh` (server).
 
 ## Option A: start from ClawPod's Shortcut (fastest)
 
 1. On your iPhone, download [`Activate the Kraken.shortcut`](https://github.com/algal/clawpod/raw/main/Activate%20the%20Kraken.shortcut) from the ClawPod repo and open it to import it.
 2. Rename it to **It's Showtime**.
 3. Edit it:
-   - **Text** action at the top: replace the URL with your Lyra server URL (e.g. `https://203-0-113-7.sslip.io`).
+   - **Text** action at the top: replace the URL with your Lyra server URL (e.g. `http://my-macbook.local:7001` on your laptop, or `https://203-0-113-7.sslip.io` on a server).
    - **Speak** action: change the greeting to e.g. `Lyra here.`
    - **Get Contents of URL** action: expand it. Under **Headers**, add `Authorization` = `Bearer <your API token>`. In the JSON body, set `speaker` to your name.
 4. Do the privacy settings below.
@@ -18,7 +18,7 @@ You need the **Server URL** and **API token** printed by `deploy/setup.sh`.
 
 Open **Shortcuts → +**, name it **It's Showtime**, and add these actions:
 
-1. **Text**: `https://<your-server-url>`
+1. **Text**: your Server URL (e.g. `http://my-macbook.local:7001`)
 2. **Set Variable**: name `server`, input = Text
 3. **Speak Text**: `Lyra here.` (Wait Until Finished: on)
 4. **Repeat** 50 times (a safety cap), containing:

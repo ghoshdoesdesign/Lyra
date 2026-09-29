@@ -5,8 +5,8 @@ Talk to your own AI agent through your AirPods. Say **"Hey Siri, it's showtime"*
 Lyra is adapted from [ClawPod](https://github.com/algal/clawpod) (a HomePod → OpenClaw bridge), with three changes:
 
 - **AirPods instead of HomePod.** The Shortcut runs on your iPhone directly, so none of HomePod's Personal Content setup is needed.
-- **Always on.** OpenClaw and Lyra run on a small cloud server, so they keep working when your laptop is off, asleep or out of battery.
-- **Secure by default.** It uses HTTPS and requires a bearer token, because the server is reachable from anywhere.
+- **Two ways to run it.** Start on your laptop (v1, no server needed), then move to a small cloud server so it keeps working when your laptop is off.
+- **Secure by default.** Every request needs a bearer token.
 
 ## How it works
 
@@ -24,7 +24,31 @@ Cloud VPS (always on)
 {reply, end_conversation} → Siri speaks the reply in your AirPods → loop
 ```
 
-## Setup (about 20 minutes)
+## Quick start: run it on your laptop (v1)
+
+The fastest way to try Lyra. You need a Mac (or Linux laptop) and an API key from [OpenAI](https://platform.openai.com/api-keys) or [Anthropic](https://console.anthropic.com).
+
+```bash
+git clone https://github.com/ghoshdoesdesign/Lyra.git
+cd Lyra
+./local/start.sh
+```
+
+On the first run it installs OpenClaw (and Node.js if needed), asks once for your API key (input hidden, OpenAI or Anthropic detected automatically), and creates an API token. Then it prints the **Server URL** and **API token** for the Shortcut ([SHORTCUT.md](SHORTCUT.md)). Later runs skip the setup.
+
+**Which URL to use:**
+
+| Command | Phone can reach Lyra | Server URL |
+|---|---|---|
+| `./local/start.sh` | Only on the same Wi-Fi as the laptop | `http://<your-mac>.local:7001` (stays the same) |
+| `./local/start.sh --tunnel` | Anywhere, including cellular | `https://<random>.trycloudflare.com` (**changes every run**, so you'd update the Shortcut each time) |
+
+**Laptop-mode limits:**
+- Lyra only works while the script is running **and** the laptop is awake. Closing the lid stops it. The script keeps the Mac from idle-sleeping while it runs.
+- On first run, macOS may ask to allow incoming connections for Python. Click **Allow**.
+- For an always-on, fixed URL, move to a server (below). Your Shortcut then only needs its URL and token changed.
+
+## Server setup: always on (about 20 minutes)
 
 ### 1. Get a server and an API key
 - **VPS:** any Ubuntu 24.04 server with 2 GB+ RAM and a public IP. For example Hetzner CX22 (~€4/mo) or a DigitalOcean 2 GB droplet (~$12/mo). If the provider has its own firewall, allow inbound **TCP 22, 80 and 443**.
