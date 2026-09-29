@@ -26,6 +26,24 @@ OS="$(uname -s)"
 [[ "$OS" == "Darwin" || "$OS" == "Linux" ]] || die "supported on macOS and Linux only"
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
+# --- Node.js (OpenClaw needs 24.16+ or 26.1+) -------------------------------
+
+node_ok() {
+  command -v node >/dev/null && node -e '
+    const [a, b] = process.versions.node.split(".").map(Number);
+    process.exit((a === 24 && b >= 16) || (a === 26 && b >= 1) || a > 26 ? 0 : 1);'
+}
+
+# If you use nvm, switch this script (not your default) to a supported Node.
+NVM_SH="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+if ! node_ok && [[ -s "$NVM_SH" ]]; then
+  set +eu
+  source "$NVM_SH"
+  nvm use 26 >/dev/null 2>&1 || nvm use 24 >/dev/null 2>&1
+  set -eu
+  node_ok || die "OpenClaw needs Node.js 26. Run:  nvm install 26   then run this script again."
+fi
+
 # --- uv (runs the Python server) ---------------------------------------------
 
 if ! command -v uv >/dev/null; then
