@@ -52,6 +52,12 @@ if ! node_ok && [[ -s "$NVM_SH" ]]; then
   node_ok || die "OpenClaw needs Node.js 26. Run:  nvm install 26   then run this script again."
 fi
 
+# Faster `openclaw` CLI startup (Lyra runs it once per request), as
+# recommended in OpenClaw's docs.
+export NODE_COMPILE_CACHE="${NODE_COMPILE_CACHE:-$HOME/.cache/openclaw-compile-cache}"
+mkdir -p "$NODE_COMPILE_CACHE"
+export OPENCLAW_NO_RESPAWN=1
+
 # --- uv (runs the Python server) ---------------------------------------------
 
 if ! command -v uv >/dev/null; then

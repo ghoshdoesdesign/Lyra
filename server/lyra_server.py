@@ -32,6 +32,7 @@ import os
 import re
 import secrets
 import shutil
+import time
 from dataclasses import dataclass, field
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -54,6 +55,11 @@ OPENCLAW_AGENT = os.getenv("LYRA_AGENT", "main")
 # How long one agent run (a task) may take. Long jobs keep running in the
 # background after the voice turn has been answered.
 TASK_TIMEOUT = int(os.getenv("LYRA_TASK_TIMEOUT", "900"))
+# Speed knobs. Lower thinking makes each model step much faster, which adds up
+# over multi-step tasks; "" leaves OpenClaw's default. LYRA_MODEL optionally
+# picks a faster model (e.g. one listed by `openclaw models list`).
+THINKING = os.getenv("LYRA_THINKING", "low")
+MODEL = os.getenv("LYRA_MODEL", "")
 # How long a voice turn waits for the agent before answering "on it" and
 # letting the task continue in the background. When Siri runs the Shortcut
 # hands-free it abandons a step after roughly 10 seconds ("Something went
@@ -204,8 +210,13 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         "--timeout", str(TASK_TIMEOUT),
         "--json",
     ]
+    if THINKING:
+        cmd += ["--thinking", THINKING]
+    if MODEL:
+        cmd += ["--model", MODEL]
 
     logger.info(f"Calling openclaw: session={session_key} speaker={speaker}")
+    started = time.monotonic()
 
     proc = None
     try:
@@ -224,6 +235,7 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
             return "Sorry, I'm having trouble connecting right now. Try again in a moment."
 
         reply = extract_reply(json.loads(stdout.decode()))
+        logger.info(f"openclaw finished in {time.monotonic() - started:.1f}s: session={session_key}")
         if not reply:
             logger.warning(f"Empty reply from openclaw: {stdout.decode()[:500]}")
             return "I'm not sure how to respond to that."

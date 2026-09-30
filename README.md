@@ -110,6 +110,8 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_AGENT` | `main` | OpenClaw agent id |
 | `LYRA_REPLY_WAIT` | `8` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
 | `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
+| `LYRA_THINKING` | `low` | Model thinking level per step (`off`, `minimal`, `low`, `medium`, `high`, …). Lower is faster; empty uses OpenClaw's default |
+| `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
 

@@ -8,6 +8,8 @@ User=lyra
 Group=lyra
 Environment=HOME=/home/lyra
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+Environment=OPENCLAW_NO_RESPAWN=1
 EnvironmentFile=/etc/lyra/lyra.env
 WorkingDirectory=/home/lyra
 ExecStart=/usr/local/bin/uv run --script /opt/lyra/lyra_server.py
