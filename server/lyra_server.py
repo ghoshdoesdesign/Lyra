@@ -316,9 +316,82 @@ def start_job(text: str, session_key: str, speaker: str) -> Job:
             logger.info(f"Background task done: session={session_key} result={result[:50]!r}")
             pending_updates.setdefault(session_key, []).append(result)
             last_results[session_key] = result
+            # Text the result right away, in case Siri hung up before speaking it.
+            record(session_key, ASSISTANT_NAME, result)
+            asyncio.create_task(send_imessage(f"✅ {ASSISTANT_NAME}: {result}"))
+            schedule_idle_flush(session_key)
 
     job.task.add_done_callback(finished)
     return job
+
+
+# -----------------------------------------------------------------------------
+# iMessage transcripts (via OpenClaw's iMessage channel)
+# -----------------------------------------------------------------------------
+
+# iMessage handle to send to (phone number or Apple ID email); empty disables.
+IMESSAGE_TO = os.getenv("LYRA_IMESSAGE_TO", "").strip()
+ASSISTANT_NAME = os.getenv("LYRA_NAME", "Lyra")
+# Send the transcript after this many seconds without activity, in case the
+# conversation ended without a goodbye (e.g. Siri hung up).
+TRANSCRIPT_IDLE = float(os.getenv("LYRA_TRANSCRIPT_IDLE", "180"))
+
+transcripts: dict[str, list[str]] = {}
+idle_flushes: dict[str, asyncio.Task] = {}
+
+
+async def send_imessage(text: str) -> None:
+    """Send text to IMESSAGE_TO through `openclaw message send`."""
+    if not IMESSAGE_TO:
+        return
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            find_openclaw(), "message", "send",
+            "--channel", "imessage",
+            "--target", IMESSAGE_TO,
+            "--message", text,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        if proc.returncode != 0:
+            logger.error(f"iMessage send failed (exit {proc.returncode}): {stderr.decode()[-1000:]}")
+        else:
+            logger.info(f"iMessage sent ({len(text)} chars)")
+    except Exception as e:
+        logger.error(f"iMessage send failed: {e}")
+
+
+def record(session_key: str, who: str, text: str) -> None:
+    """Add a line to the session's transcript."""
+    if IMESSAGE_TO and text.strip():
+        transcripts.setdefault(session_key, []).append(f"{who}: {text.strip()}")
+
+
+async def flush_transcript(session_key: str) -> None:
+    """Text the conversation so far, then start a new transcript."""
+    lines = transcripts.pop(session_key, [])
+    if lines:
+        header = f"🗣 {ASSISTANT_NAME} conversation, {time.strftime('%b %d, %I:%M %p')}"
+        await send_imessage("\n".join([header, *lines]))
+
+
+def schedule_idle_flush(session_key: str) -> None:
+    """(Re)start the timer that sends the transcript after inactivity."""
+    if not IMESSAGE_TO:
+        return
+    old = idle_flushes.pop(session_key, None)
+    if old:
+        old.cancel()
+
+    async def later() -> None:
+        await asyncio.sleep(TRANSCRIPT_IDLE)
+        if session_key in running_jobs:  # still working; the result will reschedule
+            return
+        idle_flushes.pop(session_key, None)
+        await flush_transcript(session_key)
+
+    idle_flushes[session_key] = asyncio.create_task(later())
 
 
 def short(text: str, words: int = 8) -> str:
@@ -369,7 +442,18 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
         for u in updates
     )
 
+    is_poll = text == POLL_TEXT
+    if not is_poll:
+        record(session_key, "You", text)
+        schedule_idle_flush(session_key)
+
     def respond(reply: str, end: bool = False, waiting: bool = False) -> ChatResponse:
+        # Background results are recorded when they finish, so only the
+        # reply to the user's own words goes into the transcript here.
+        if not is_poll:
+            record(session_key, ASSISTANT_NAME, reply)
+        if end:
+            asyncio.create_task(flush_transcript(session_key))
         if update_text:
             reply = f"{update_text} {reply}".strip()
         logger.info(f"Response: end={end} waiting={waiting} reply={reply[:50]!r}")

@@ -49,6 +49,21 @@ On the first run it installs OpenClaw (and Node.js if needed), asks once for you
 - On first run, macOS may ask to allow incoming connections for Python. Click **Allow**.
 - For an always-on, fixed URL, move to a server (below). Your Shortcut then only needs its URL and token changed.
 
+## iMessage transcripts (laptop mode)
+
+Lyra can text you through OpenClaw's built-in iMessage channel:
+- **✅ each background task's result** the moment it's done (so you get it even if Siri hung up), and
+- **the full conversation transcript** when you say goodbye, or after 3 minutes of silence.
+
+One-time setup on the Mac signed in to Messages:
+
+```bash
+./local/setup_imessage.sh        # asks for your phone number or Apple ID email
+./local/start.sh --tunnel        # restart Lyra
+```
+
+The script installs `imsg` (OpenClaw's bridge to Messages.app) and the iMessage plugin, configures the channel so only your number can message the agent, walks you through Full Disk Access and Automation, and sends a test text. The number is stored in `~/.lyra/lyra.env` as `LYRA_IMESSAGE_TO`, not in the repo. This needs macOS, so it isn't available on a Linux server.
+
 ## Server setup: always on (about 20 minutes)
 
 ### 1. Get a server and an API key
@@ -111,6 +126,9 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_REPLY_WAIT` | `4` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
 | `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
 | `LYRA_THINKING` | `low` | Model thinking level per step (`off`, `minimal`, `low`, `medium`, `high`, …). Lower is faster; empty uses OpenClaw's default |
+| `LYRA_IMESSAGE_TO` | (off) | iMessage handle for results and transcripts (set by `local/setup_imessage.sh`) |
+| `LYRA_TRANSCRIPT_IDLE` | `180` | Seconds of silence before the transcript is texted |
+| `LYRA_NAME` | `Lyra` | Assistant name used in transcripts |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |

@@ -12,6 +12,7 @@ Voice access to an OpenClaw agent through AirPods, adapted from https://github.c
 - `server/lyra_server.py`: FastAPI bridge. `POST /chat {text, speaker}` → `openclaw agent --json` → `{reply, end_conversation}`. Single-file uv script.
 - `server/test_client.py`: interactive CLI client for testing without Siri.
 - `local/start.sh`: v1 laptop mode (macOS/Linux). Installs OpenClaw via its official installer, onboards once, stores the token in `~/.lyra/lyra.env`, runs the server on 0.0.0.0; `--tunnel` adds a Cloudflare quick tunnel.
+- `local/setup_imessage.sh`: one-time setup of OpenClaw's iMessage channel (imsg + plugin + allowlist of the owner's handle); stores `LYRA_IMESSAGE_TO` in `~/.lyra/lyra.env`.
 - `deploy/setup.sh`: idempotent Ubuntu 24.04 installer (Node 24, OpenClaw, uv, Caddy, ufw, systemd units).
 - `deploy/lyra.service`, `deploy/Caddyfile`: service and HTTPS config used by setup.sh.
 
@@ -21,3 +22,4 @@ Voice access to an OpenClaw agent through AirPods, adapted from https://github.c
 - The agent signals the end of a conversation with the `[END]` marker, which is stripped before speaking.
 - Long tasks: `/chat` waits `LYRA_REPLY_WAIT` (4s; in practice Siri dropped hands-free replies that took ~7-8s) for the agent, then answers "I'm on it" and keeps the run going as a background job (one per session; OpenClaw runs one turn per session). While a task runs, responses include `waiting: true`; the Shortcut then sends `__lyra_poll__` (POLL_TEXT) instead of asking the user, and a poll waits up to `LYRA_REPLY_WAIT` for the result. Otherwise results are prepended to the speaker's next reply; "cancel" terminates the run. Keep voice turns under Siri's request timeout.
 - `/chat` includes `end_conversation: true` only when the conversation is over and omits it otherwise; the Shortcut tests it with "has any value" (Shortcuts can't reliably compare JSON booleans). Keep it that way.
+- iMessage (laptop mode only): with `LYRA_IMESSAGE_TO` set, background results are texted immediately and the transcript is texted on goodbye or after `LYRA_TRANSCRIPT_IDLE`, via `openclaw message send --channel imessage`. Never commit the handle.
