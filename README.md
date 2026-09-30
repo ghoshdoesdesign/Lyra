@@ -61,6 +61,8 @@ Sam: Can you go ahead and add a Colgate toothpaste to my Amazon cart?
 
 Background results are texted the moment they finish, so you get them even if Siri hung up.
 
+**Answer by voice or by text.** When Lyra needs something from you ("What should the email say?"), it says the question in your AirPods and keeps listening, and the question also arrives on WhatsApp. Answer whichever way is easier. Voice and WhatsApp share one conversation with the agent (OpenClaw's main session), so a WhatsApp reply like "Say I'll be 10 minutes late, his address is aban@example.com" continues the same task, and Lyra answers in WhatsApp. Replying by text needs a separate WhatsApp number for Lyra (below).
+
 This works both on your laptop and on the always-on server. One-time setup:
 
 ```bash
@@ -70,7 +72,9 @@ sudo ./local/setup_whatsapp.sh     # cloud server (run from the repo on the serv
 
 It asks for your WhatsApp number, installs OpenClaw's WhatsApp plugin, lets only your number message the agent, shows a QR code to scan (WhatsApp → Settings → Linked Devices), and sends a test message. On a laptop, restart Lyra afterwards; the server script restarts it for you. The number is stored in `lyra.env`, not in the repo.
 
-**Use a separate WhatsApp number for Lyra if you can.** Texts then arrive as normal notifications, which iOS can read aloud in your AirPods, and you can reply to chat with Lyra. With your own number they land in "Message yourself", usually without a notification.
+**Use a separate WhatsApp number for Lyra if you can.** Texts then arrive from Lyra as normal notifications, which iOS can read aloud in your AirPods, and you can reply to answer Lyra. With your own number they land in "Message yourself", usually without a notification, and replies are ignored.
+
+A free Google Voice number works. On your iPhone, install **WhatsApp Business** (it runs next to your normal WhatsApp) and register it with the Google Voice number. When WhatsApp sends the code, choose **Call me**; the call rings in the Google Voice app and reads the code out. Then run `./local/setup_whatsapp.sh`, pick option 1, and scan the QR code from WhatsApp Business → Settings → Linked Devices. Running the script again replaces the previous link, so it also switches an existing own-number setup over to Lyra's number.
 
 On a Mac you can use iMessage instead: `./local/setup_imessage.sh` (macOS only, so not available on the server).
 
@@ -141,10 +145,11 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_WORKING_MESSAGE` | `Hang in there while I finish your task.` | Spoken and texted when a task continues in the background |
 | `LYRA_NAME` | `Lyra` | Assistant name used in texts |
 | `LYRA_MIDWAY_AFTER` / `LYRA_MIDWAY_MESSAGE` | `20` / `I'll let you know once I'm done.` | Check-ins during a task are silent; this is said once after that many seconds |
-| `LYRA_ONE_SHOT` | `1` | End the conversation once Lyra answers or finishes the task (unless the reply is a question); `0` keeps the conversation going |
+| `LYRA_ONE_SHOT` | `1` | End the conversation once Lyra answers or finishes the task (unless the reply asks a question); `0` keeps the conversation going |
 | `LYRA_EMOJI` | `🔱` | Emoji before the assistant's texted lines; empty for none |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
-| `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
+| `LYRA_SESSION` | `auto` | `auto`: voice shares the agent's main session with WhatsApp when texting is set up, so you can answer by text; `main`: always; `speaker`: a separate session per speaker |
+| `LYRA_SESSION_PREFIX` | `airpods` | With per-speaker sessions, each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
 
 ## Limitations

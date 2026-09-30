@@ -54,9 +54,11 @@ cat <<EOF
 
 Which WhatsApp account should OpenClaw log in as?
   1) A separate number just for Lyra (recommended): texts arrive as normal
-     notifications, and you can reply to chat with Lyra.
+     notifications, and you can reply to answer Lyra's questions by text
+     (a Google Voice number works; register WhatsApp or WhatsApp Business
+     with it).
   2) Your own number: texts go to your "Message yourself" chat, usually
-     without a notification.
+     without a notification, and you can't answer Lyra by text.
 EOF
 read -rp "Choose 1 or 2 [1]: " CHOICE
 CHOICE="${CHOICE:-1}"
@@ -89,6 +91,8 @@ cat <<EOF
 ────────────────────────────────────────────────────────────
 EOF
 read -rp "Press Enter to show the QR code… " _
+# Drop any earlier link (e.g. switching from your own number to Lyra's).
+oc channels logout --channel whatsapp >/dev/null 2>&1 || true
 oc channels login --channel whatsapp
 
 # --- Save the setting for Lyra ------------------------------------------------

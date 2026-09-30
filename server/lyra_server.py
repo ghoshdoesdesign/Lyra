@@ -69,6 +69,9 @@ REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "4"))
 
 # Session key prefix; each speaker gets their own conversation.
 SESSION_PREFIX = os.getenv("LYRA_SESSION_PREFIX", "airpods")
+# "auto": share the agent's main session with WhatsApp when texting is set up;
+# "main": always share it; "speaker": always one session per speaker.
+SESSION = os.getenv("LYRA_SESSION", "auto").strip().lower()
 
 # The agent appends this marker when the conversation should end.
 END_MARKER = "[END]"
@@ -100,7 +103,9 @@ ONE_SHOT = os.getenv("LYRA_ONE_SHOT", "1") == "1"
 
 
 def is_final(reply: str) -> bool:
-    return ONE_SHOT and not reply.rstrip().endswith("?")
+    # A question anywhere ("What should it say? Once you tell me, I'll…")
+    # needs an answer, so it keeps the conversation open.
+    return ONE_SHOT and "?" not in reply
 
 
 # Things the user can say to stop a running background task.
@@ -182,7 +187,16 @@ def require_auth(request: Request) -> None:
 # -----------------------------------------------------------------------------
 
 def get_session_key(speaker: str) -> str:
-    """Derive a per-speaker session key, e.g. "airpods-alexis"."""
+    """
+    The OpenClaw session for this speaker's voice conversation.
+
+    With texting set up, voice uses the agent's main session, which is where
+    OpenClaw puts direct messages (session.dmScope "main", its default). Voice
+    and WhatsApp then share one conversation, so a question Lyra asks by voice
+    can be answered by text. Otherwise each speaker gets "airpods-<name>".
+    """
+    if SESSION == "main" or (SESSION == "auto" and NOTIFY_TO):
+        return f"agent:{OPENCLAW_AGENT}:main"
     speaker_key = re.sub(r"[^a-z0-9]+", "-", speaker.lower()).strip("-")
     if not speaker_key or speaker_key == "unknown":
         speaker_key = "default"
@@ -560,6 +574,6 @@ if __name__ == "__main__":
         )
 
     logger.info(f"Starting Lyra on {HOST}:{PORT}")
-    logger.info(f"Agent: {OPENCLAW_AGENT}, Session prefix: {SESSION_PREFIX}")
+    logger.info(f"Agent: {OPENCLAW_AGENT}, Session: {get_session_key('Unknown')}")
 
     uvicorn.run(app, host=HOST, port=PORT, log_level=LOG_LEVEL.lower())
