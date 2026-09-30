@@ -325,38 +325,35 @@ def start_job(text: str, session_key: str, speaker: str) -> Job:
             pending_updates.setdefault(session_key, []).append(result)
             last_results[session_key] = result
             # Text the result right away, in case Siri hung up before speaking it.
-            record(session_key, ASSISTANT_NAME, result)
-            asyncio.create_task(send_text(f"✅ {ASSISTANT_NAME}: {result}"))
-            schedule_idle_flush(session_key)
+            text_line(ASSISTANT_NAME, result)
 
     job.task.add_done_callback(finished)
     return job
 
 
 # -----------------------------------------------------------------------------
-# Texted results and transcripts (via an OpenClaw channel: WhatsApp, iMessage…)
+# Live conversation texts (via an OpenClaw channel: WhatsApp, iMessage…)
 # -----------------------------------------------------------------------------
 
-# Where to text results and transcripts; empty disables. LYRA_IMESSAGE_TO is
-# the older iMessage-only setting and still works.
+# Where to text the conversation; empty disables. LYRA_IMESSAGE_TO is the
+# older iMessage-only setting and still works.
 NOTIFY_TO = (os.getenv("LYRA_NOTIFY_TO") or os.getenv("LYRA_IMESSAGE_TO", "")).strip()
 NOTIFY_CHANNEL = (
     os.getenv("LYRA_NOTIFY_CHANNEL")
     or ("imessage" if os.getenv("LYRA_IMESSAGE_TO") else "whatsapp")
 ).strip()
 ASSISTANT_NAME = os.getenv("LYRA_NAME", "Lyra")
-# Send the transcript after this many seconds without activity, in case the
-# conversation ended without a goodbye (e.g. Siri hung up).
-TRANSCRIPT_IDLE = float(os.getenv("LYRA_TRANSCRIPT_IDLE", "180"))
+# Name shown for the user's lines when the Shortcut doesn't send a speaker.
+USER_NAME = os.getenv("LYRA_USER_NAME", "You")
+# Spoken and texted when a task continues in the background.
+WORKING_MESSAGE = os.getenv("LYRA_WORKING_MESSAGE", "Hang in there while I finish your task.")
 
-transcripts: dict[str, list[str]] = {}
-idle_flushes: dict[str, asyncio.Task] = {}
+# One message per line of conversation, sent strictly in order.
+outbox: asyncio.Queue | None = None
 
 
 async def send_text(text: str) -> None:
     """Text NOTIFY_TO on NOTIFY_CHANNEL through `openclaw message send`."""
-    if not NOTIFY_TO:
-        return
     try:
         proc = await asyncio.create_subprocess_exec(
             find_openclaw(), "message", "send",
@@ -366,45 +363,31 @@ async def send_text(text: str) -> None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         if proc.returncode != 0:
-            logger.error(f"{NOTIFY_CHANNEL} send failed (exit {proc.returncode}): {stderr.decode()[-1000:]}")
+            detail = (stderr.decode() + stdout.decode()).strip()
+            logger.error(f"{NOTIFY_CHANNEL} send failed (exit {proc.returncode}): {detail[-1000:]}")
         else:
-            logger.info(f"{NOTIFY_CHANNEL} message sent ({len(text)} chars)")
+            logger.info(f"{NOTIFY_CHANNEL} message sent: {text[:50]!r}")
     except Exception as e:
         logger.error(f"{NOTIFY_CHANNEL} send failed: {e}")
 
 
-def record(session_key: str, who: str, text: str) -> None:
-    """Add a line to the session's transcript."""
-    if NOTIFY_TO and text.strip():
-        transcripts.setdefault(session_key, []).append(f"{who}: {text.strip()}")
+async def outbox_worker() -> None:
+    while True:
+        text = await outbox.get()
+        await send_text(text)
 
 
-async def flush_transcript(session_key: str) -> None:
-    """Text the conversation so far, then start a new transcript."""
-    lines = transcripts.pop(session_key, [])
-    if lines:
-        header = f"🗣 {ASSISTANT_NAME} conversation, {time.strftime('%b %d, %I:%M %p')}"
-        await send_text("\n".join([header, *lines]))
-
-
-def schedule_idle_flush(session_key: str) -> None:
-    """(Re)start the timer that sends the transcript after inactivity."""
-    if not NOTIFY_TO:
+def text_line(who: str, text: str) -> None:
+    """Queue one conversation line ("Sam: …", "Lyra: …") as its own message."""
+    global outbox
+    if not NOTIFY_TO or not text.strip():
         return
-    old = idle_flushes.pop(session_key, None)
-    if old:
-        old.cancel()
-
-    async def later() -> None:
-        await asyncio.sleep(TRANSCRIPT_IDLE)
-        if session_key in running_jobs:  # still working; the result will reschedule
-            return
-        idle_flushes.pop(session_key, None)
-        await flush_transcript(session_key)
-
-    idle_flushes[session_key] = asyncio.create_task(later())
+    if outbox is None:
+        outbox = asyncio.Queue()
+        asyncio.create_task(outbox_worker())
+    outbox.put_nowait(f"{who}: {text.strip()}")
 
 
 def short(text: str, words: int = 8) -> str:
@@ -457,16 +440,13 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
 
     is_poll = text == POLL_TEXT
     if not is_poll:
-        record(session_key, "You", text)
-        schedule_idle_flush(session_key)
+        text_line(speaker if speaker != "Unknown" else USER_NAME, text)
 
     def respond(reply: str, end: bool = False, waiting: bool = False) -> ChatResponse:
-        # Background results are recorded when they finish, so only the
-        # reply to the user's own words goes into the transcript here.
+        # Background results are texted when they finish, so only the reply
+        # to the user's own words is texted here.
         if not is_poll:
-            record(session_key, ASSISTANT_NAME, reply)
-        if end:
-            asyncio.create_task(flush_transcript(session_key))
+            text_line(ASSISTANT_NAME, reply)
         if update_text:
             reply = f"{update_text} {reply}".strip()
         logger.info(f"Response: end={end} waiting={waiting} reply={reply[:50]!r}")
@@ -529,7 +509,7 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     except asyncio.TimeoutError:
         job.detached = True
         logger.info(f"Task continues in background: session={session_key}")
-        return respond("On it, one moment.", waiting=True)
+        return respond(WORKING_MESSAGE, waiting=True)
 
     reply, agent_ended = strip_end_marker(reply)
     end_conversation = agent_ended or is_user_goodbye(text)

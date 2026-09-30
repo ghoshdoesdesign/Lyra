@@ -51,9 +51,15 @@ On the first run it installs OpenClaw (and Node.js if needed), asks once for you
 
 ## Results and transcripts on WhatsApp
 
-Lyra texts you through OpenClaw's built-in WhatsApp channel:
-- **✅ each background task's result** the moment it's done (so you get it even if Siri hung up), and
-- **the full conversation transcript** when you say goodbye, or after 3 minutes of silence.
+Lyra texts you the conversation live through OpenClaw's built-in WhatsApp channel, one message per line:
+
+```
+Sam: Can you go ahead and add a Colgate toothpaste to my Amazon cart?
+Lyra: Hang in there while I finish your task.
+Lyra: Added Colgate Cavity Protection toothpaste to your Amazon cart.
+```
+
+Background results are texted the moment they finish, so you get them even if Siri hung up.
 
 This works both on your laptop and on the always-on server. One-time setup:
 
@@ -131,8 +137,9 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
 | `LYRA_THINKING` | `low` | Model thinking level per step (`off`, `minimal`, `low`, `medium`, `high`, …). Lower is faster; empty uses OpenClaw's default |
 | `LYRA_NOTIFY_CHANNEL` / `LYRA_NOTIFY_TO` | (off) | OpenClaw channel (`whatsapp`, `imessage`, …) and recipient for texted results and transcripts (set by `local/setup_whatsapp.sh`) |
-| `LYRA_TRANSCRIPT_IDLE` | `180` | Seconds of silence before the transcript is texted |
-| `LYRA_NAME` | `Lyra` | Assistant name used in transcripts |
+| `LYRA_USER_NAME` | `You` | Your name in texts when the Shortcut doesn't send `speaker` |
+| `LYRA_WORKING_MESSAGE` | `Hang in there while I finish your task.` | Spoken and texted when a task continues in the background |
+| `LYRA_NAME` | `Lyra` | Assistant name used in texts |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
