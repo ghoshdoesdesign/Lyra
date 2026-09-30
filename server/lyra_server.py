@@ -234,7 +234,7 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         if proc.returncode != 0:
             err = stderr.decode()
             logger.error(f"openclaw error (exit {proc.returncode}): {err[-2000:]}")
-            if re.search(r"no credits|insufficient_quota|exceeded your current quota|billing", err, re.I):
+            if re.search(r"no credits|insufficient.credits|insufficient_quota|exceeded your current quota|billing|\b402\b", err, re.I):
                 return "Your AI account is out of credits. Add credits on your provider's billing page, then try again."
             return "Sorry, I'm having trouble connecting right now. Try again in a moment."
 

@@ -72,7 +72,7 @@ On a Mac you can use iMessage instead: `./local/setup_imessage.sh` (macOS only, 
 
 ### 1. Get a server and an API key
 - **VPS:** any Ubuntu 24.04 server with 2 GB+ RAM and a public IP. For example Hetzner CX22 (~€4/mo) or a DigitalOcean 2 GB droplet (~$12/mo). If the provider has its own firewall, allow inbound **TCP 22, 80 and 443**.
-- **An API key** from [OpenAI](https://platform.openai.com/api-keys) or [Anthropic](https://console.anthropic.com). Keep it out of the repo; the setup script asks for it.
+- **An API key** from [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com) or [OpenRouter](https://openrouter.ai/keys). Keep it out of the repo; the setup script asks for it.
 
 ### 2. Install everything on the server
 

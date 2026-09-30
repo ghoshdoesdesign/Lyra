@@ -97,16 +97,17 @@ as_lyra() {
 # --- OpenClaw onboarding + Gateway daemon ------------------------------------
 
 ask_for_key() {
-  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}"
+  MODEL_API_KEY="${LYRA_MODEL_API_KEY:-${OPENROUTER_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-}}}}"
   if [[ -z "$MODEL_API_KEY" ]]; then
-    read -rsp "Paste your OpenAI or Anthropic API key (input hidden): " MODEL_API_KEY; echo
+    read -rsp "Paste your OpenAI, Anthropic or OpenRouter API key (input hidden): " MODEL_API_KEY; echo
   fi
   MODEL_API_KEY="$(printf '%s' "$MODEL_API_KEY" | tr -d '[:space:]')"
   [[ -n "$MODEL_API_KEY" ]] || die "an API key is required for first-time setup"
   case "$MODEL_API_KEY" in
+    sk-or-*)  AUTH_ARGS=(--auth-choice openrouter-api-key --openrouter-api-key "$MODEL_API_KEY"); PROVIDER="OpenRouter" ;;
     sk-ant-*) AUTH_ARGS=(--auth-choice apiKey --anthropic-api-key "$MODEL_API_KEY"); PROVIDER="Anthropic" ;;
     sk-*)     AUTH_ARGS=(--auth-choice openai-api-key --openai-api-key "$MODEL_API_KEY"); PROVIDER="OpenAI" ;;
-    *)        die "unrecognized key format (expected sk-... for OpenAI or sk-ant-... for Anthropic)" ;;
+    *)        die "unrecognized key format (expected sk-... for OpenAI, sk-ant-... for Anthropic, or sk-or-... for OpenRouter)" ;;
   esac
 }
 
