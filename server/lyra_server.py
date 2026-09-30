@@ -80,6 +80,9 @@ USER_END_PHRASES = {
     "thank you lyra",
 }
 
+# Sent by the Shortcut (instead of the user's words) to check on a running task.
+POLL_TEXT = "__lyra_poll__"
+
 # Things the user can say to stop a running background task.
 USER_CANCEL_PHRASES = {
     "cancel",
@@ -133,6 +136,10 @@ class ChatResponse(BaseModel):
     """
     reply: str
     end_conversation: bool | None = None
+    # Present (as true) while a task is still running. The Shortcut then skips
+    # "Ask for Input" and sends POLL_TEXT to hear the result as soon as it's
+    # ready, without the user having to ask.
+    waiting: bool | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -341,27 +348,59 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
         for u in updates
     )
 
-    def respond(reply: str, end: bool = False) -> ChatResponse:
+    def respond(reply: str, end: bool = False, waiting: bool = False) -> ChatResponse:
         if update_text:
             reply = f"{update_text} {reply}".strip()
-        logger.info(f"Response: end={end} reply={reply[:50]!r}")
-        return ChatResponse(reply=reply, end_conversation=True if end else None)
+        logger.info(f"Response: end={end} waiting={waiting} reply={reply[:50]!r}")
+        return ChatResponse(
+            reply=reply,
+            end_conversation=True if end else None,
+            waiting=True if waiting else None,
+        )
+
+    async def wait_for_job(job: Job) -> bool:
+        """Wait up to REPLY_WAIT for a running job; True if it finished."""
+        try:
+            await asyncio.wait_for(asyncio.shield(job.task), timeout=REPLY_WAIT)
+        except asyncio.TimeoutError:
+            return False
+        except asyncio.CancelledError:
+            if not job.task.cancelled():
+                raise  # this request itself was cancelled
+        await asyncio.sleep(0)  # let the job's done-callback record its result
+        return True
+
+    job = running_jobs.get(session_key)
+
+    # The Shortcut checking on a running task: speak the result once it's ready.
+    if text == POLL_TEXT:
+        if job and not await wait_for_job(job):
+            return respond("Still working on it.", waiting=True)
+        results = updates + pending_updates.pop(session_key, [])
+        if not results:
+            return respond("Done.")
+        reply = " ".join(results)
+        return ChatResponse(reply=reply)
 
     # A task is still running in the background for this speaker.
-    job = running_jobs.get(session_key)
     if job:
         if matches(text, USER_CANCEL_PHRASES):
             job.task.cancel()
             return respond(f"Okay, I stopped working on {short(job.request)}.")
         if is_user_goodbye(text):
             return respond("Okay, I'll keep working on it in the background. Bye!", end=True)
-        return respond(
-            f"I'm still working on {short(job.request)}. "
-            "Ask me again in a minute, or say cancel to stop it."
-        )
+        if not await wait_for_job(job):
+            return respond(
+                f"I'm still working on {short(job.request)}. Say cancel to stop it.",
+                waiting=True,
+            )
+        # It just finished: deliver the result, then treat this utterance as new.
+        update_text = " ".join(pending_updates.pop(session_key, [])) or update_text
+        if STATUS_QUERY.search(text.lower()):
+            return respond("")
 
     # The user is just checking on a task that has since finished.
-    if updates and STATUS_QUERY.search(text.lower()):
+    elif updates and STATUS_QUERY.search(text.lower()):
         return respond("")
 
     job = start_job(text, session_key, speaker)
@@ -370,9 +409,7 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     except asyncio.TimeoutError:
         job.detached = True
         logger.info(f"Task continues in background: session={session_key}")
-        return respond(
-            "I'm on it. Ask me for an update in a minute."
-        )
+        return respond("On it, one moment.", waiting=True)
 
     reply, agent_ended = strip_end_marker(reply)
     end_conversation = agent_ended or is_user_goodbye(text)

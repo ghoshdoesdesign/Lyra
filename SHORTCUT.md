@@ -16,26 +16,39 @@ You need the **Server URL** and **API token** printed by `local/start.sh` (lapto
 
 ## Option B: build it from scratch
 
-Open **Shortcuts → +**, name it **It's Showtime**, and add these actions:
+Open **Shortcuts → +**, name it **It's Showtime**, and add these actions (search each by name):
 
-1. **Text**: your Server URL (e.g. `http://my-macbook.local:7001`)
-2. **Set Variable**: name `server`, input = Text
-3. **Speak Text**: `Lyra here.` (Wait Until Finished: on)
-4. **Repeat** 50 times (a safety cap), containing:
-   1. **Ask for Input**: Type **Text**, Prompt `Go on?`
-   2. **Get Contents of URL**
-      - URL: `server` + `/chat`
-      - Method: **POST**
-      - Headers: `Authorization` = `Bearer <your API token>`
-      - Request Body: **JSON**
-        - `text` = *Provided Input*
-        - `speaker` = your name (e.g. `Sam`)
-   3. **Get Dictionary Value**: key `reply` from *Contents of URL*
-   4. **Speak Text**: *Dictionary Value* (Wait Until Finished: on)
-   5. **Get Dictionary Value**: key `end_conversation` from *Contents of URL*
-   6. **If** *Dictionary Value* **has any value** → **Stop This Shortcut** (Lyra only sends `end_conversation` when the conversation is over; Shortcuts can't reliably compare JSON `true`, but "has any value" always works)
+```
+Speak "Lyra here"
+Text {}
+Set Variable  last  to  Text
+Repeat 50 times
+   Get Value for  waiting  in  last
+   If  Dictionary Value  has any value
+      Text  __lyra_poll__
+   Otherwise
+      Ask for Text with "Go on?"
+   End If
+   Get contents of  https://<your-server>/chat
+        Method POST · Header Authorization = Bearer <token>
+        JSON body: text = If Result, speaker = <your name>
+   Set Variable  last  to  Contents of URL
+   Get Value for  reply  in  Contents of URL
+   Speak  Dictionary Value
+   Get Value for  end_conversation  in  Contents of URL
+   If  Dictionary Value  has any value
+      Stop This Shortcut
+   Otherwise
+   End If
+End Repeat
+```
 
-When Siri runs the Shortcut hands-free, "Ask for Input" becomes a spoken prompt, and you answer by voice.
+How it works:
+- Lyra answers each request within ~8 seconds, because Siri abandons a hands-free step after ~10 seconds ("Something went wrong").
+- If a task needs longer, Lyra says "On it, one moment" and includes `waiting` in its response. The next loop then **skips "Go on?"** and sends `__lyra_poll__`, so Lyra speaks the result (or a question like "What time?") as soon as it's ready, without you having to ask.
+- `end_conversation` and `waiting` are only present when true; Shortcuts can't reliably compare JSON `true`, but "has any value" always works.
+
+When Siri runs the Shortcut hands-free, "Ask for Input" becomes a spoken prompt and you answer by voice. When you tap it in the app, it shows a keyboard instead (tap the 🎤 on the keyboard to dictate).
 
 ## Privacy and Siri settings
 
