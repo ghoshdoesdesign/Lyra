@@ -85,10 +85,23 @@ USER_END_PHRASES = {
     "stop",
     "thanks lyra",
     "thank you lyra",
+    "thanks",
+    "thank you",
+    "perfect thank you",
+    "perfect thanks",
 }
 
 # Sent by the Shortcut (instead of the user's words) to check on a running task.
 POLL_TEXT = "__lyra_poll__"
+
+# One request per conversation: end once Lyra has answered or finished the
+# task, unless the reply is a question that needs an answer.
+ONE_SHOT = os.getenv("LYRA_ONE_SHOT", "1") == "1"
+
+
+def is_final(reply: str) -> bool:
+    return ONE_SHOT and not reply.rstrip().endswith("?")
+
 
 # Things the user can say to stop a running background task.
 USER_CANCEL_PHRASES = {
@@ -141,7 +154,9 @@ class ChatResponse(BaseModel):
     Shortcuts can't reliably compare JSON booleans, but it can always test
     "Dictionary Value has any value", so absence means "keep going".
     """
-    reply: str
+    # Absent on silent check-ins while a task runs; the Shortcut only speaks
+    # when "reply has any value".
+    reply: str | None = None
     end_conversation: bool | None = None
     # Present (as true) while a task is still running. The Shortcut then skips
     # "Ask for Input" and sends POLL_TEXT to hear the result as soon as it's
@@ -300,6 +315,8 @@ class Job:
     request: str
     task: asyncio.Task
     detached: bool = False  # the voice turn stopped waiting; deliver later
+    started: float = field(default_factory=time.monotonic)
+    announced: bool = False  # the one-time "I'll let you know" was said
 
 
 # One running job per session: OpenClaw runs one turn per session at a time.
@@ -349,6 +366,10 @@ ASSISTANT_EMOJI = os.getenv("LYRA_EMOJI", "🔱")
 USER_NAME = os.getenv("LYRA_USER_NAME", "You")
 # Spoken and texted when a task continues in the background.
 WORKING_MESSAGE = os.getenv("LYRA_WORKING_MESSAGE", "Hang in there while I finish your task.")
+# While a task runs, check-ins are silent; after this many seconds Lyra says
+# MIDWAY_MESSAGE once.
+MIDWAY_AFTER = float(os.getenv("LYRA_MIDWAY_AFTER", "20"))
+MIDWAY_MESSAGE = os.getenv("LYRA_MIDWAY_MESSAGE", "I'll let you know once I'm done.")
 
 # One message per line of conversation, sent strictly in order.
 outbox: asyncio.Queue | None = None
@@ -476,10 +497,16 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     # The Shortcut checking on a running task: speak the result once it's ready.
     if text == POLL_TEXT:
         if job and not await wait_for_job(job):
-            return respond("Still working.", waiting=True)
+            # Stay silent while working, except one reassurance midway.
+            if not job.announced and time.monotonic() - job.started >= MIDWAY_AFTER:
+                job.announced = True
+                return respond(MIDWAY_MESSAGE, waiting=True)
+            logger.info("Response: silent check-in (still working)")
+            return ChatResponse(waiting=True)
         results = updates + pending_updates.pop(session_key, [])
         update_text = ""
-        return respond(" ".join(results) or "Done.")
+        reply = " ".join(results) or "Done."
+        return respond(reply, end=is_final(reply))
 
     # A task is still running in the background for this speaker.
     if job:
@@ -515,7 +542,7 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
         return respond(WORKING_MESSAGE, waiting=True)
 
     reply, agent_ended = strip_end_marker(reply)
-    end_conversation = agent_ended or is_user_goodbye(text)
+    end_conversation = agent_ended or is_user_goodbye(text) or is_final(reply)
     return respond(reply or "Goodbye!", end=end_conversation)
 
 

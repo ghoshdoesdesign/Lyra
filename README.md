@@ -140,6 +140,8 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_USER_NAME` | `You` | Your name in texts when the Shortcut doesn't send `speaker` |
 | `LYRA_WORKING_MESSAGE` | `Hang in there while I finish your task.` | Spoken and texted when a task continues in the background |
 | `LYRA_NAME` | `Lyra` | Assistant name used in texts |
+| `LYRA_MIDWAY_AFTER` / `LYRA_MIDWAY_MESSAGE` | `20` / `I'll let you know once I'm done.` | Check-ins during a task are silent; this is said once after that many seconds |
+| `LYRA_ONE_SHOT` | `1` | End the conversation once Lyra answers or finishes the task (unless the reply is a question); `0` keeps the conversation going |
 | `LYRA_EMOJI` | `🔱` | Emoji before the assistant's texted lines; empty for none |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |

@@ -34,7 +34,10 @@ Repeat 50 times
         JSON body: text = If Result, speaker = <your name>
    Set Variable  last  to  Contents of URL
    Get Value for  reply  in  Contents of URL
-   Speak  Dictionary Value
+   If  Dictionary Value  has any value
+      Speak  Dictionary Value
+   Otherwise
+   End If
    Get Value for  end_conversation  in  Contents of URL
    If  Dictionary Value  has any value
       Stop This Shortcut
@@ -45,7 +48,9 @@ End Repeat
 
 How it works:
 - Lyra answers each request within ~4 seconds, because Siri hangs up on slow hands-free requests after only a few seconds.
-- If a task needs longer, Lyra says "On it, one moment" and includes `waiting` in its response. The next loop then **skips "Go on?"** and sends `__lyra_poll__`, so Lyra speaks the result (or a question like "What time?") as soon as it's ready, without you having to ask.
+- If a task needs longer, Lyra says "Hang in there while I finish your task" and includes `waiting` in its response. The next loop then **skips "Go on?"** and sends `__lyra_poll__`, so Lyra speaks the result (or a question like "What time?") as soon as it's ready, without you having to ask.
+- These check-ins are **silent** (no `reply`), except one "I'll let you know once I'm done" after ~20 seconds. That's why **Speak** sits inside "If reply has any value".
+- Once Lyra gives the final answer or confirmation, the Shortcut ends (unless the answer is a question).
 - `end_conversation` and `waiting` are only present when true; Shortcuts can't reliably compare JSON `true`, but "has any value" always works.
 
 When Siri runs the Shortcut hands-free, "Ask for Input" becomes a spoken prompt and you answer by voice. When you tap it in the app, it shows a keyboard instead (tap the 🎤 on the keyboard to dictate).
