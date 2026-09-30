@@ -55,8 +55,8 @@ Lyra texts you the conversation live through OpenClaw's built-in WhatsApp channe
 
 ```
 Sam: Can you go ahead and add a Colgate toothpaste to my Amazon cart?
-Lyra: Hang in there while I finish your task.
-Lyra: Added Colgate Cavity Protection toothpaste to your Amazon cart.
+🔱 Lyra: Hang in there while I finish your task.
+🔱 Lyra: Added Colgate Cavity Protection toothpaste to your Amazon cart.
 ```
 
 Background results are texted the moment they finish, so you get them even if Siri hung up.
@@ -140,6 +140,7 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_USER_NAME` | `You` | Your name in texts when the Shortcut doesn't send `speaker` |
 | `LYRA_WORKING_MESSAGE` | `Hang in there while I finish your task.` | Spoken and texted when a task continues in the background |
 | `LYRA_NAME` | `Lyra` | Assistant name used in texts |
+| `LYRA_EMOJI` | `🔱` | Emoji before the assistant's texted lines; empty for none |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |

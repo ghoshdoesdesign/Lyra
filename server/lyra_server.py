@@ -343,6 +343,8 @@ NOTIFY_CHANNEL = (
     or ("imessage" if os.getenv("LYRA_IMESSAGE_TO") else "whatsapp")
 ).strip()
 ASSISTANT_NAME = os.getenv("LYRA_NAME", "Lyra")
+# Emoji in front of the assistant's texted lines ("🔱 Lyra: …"); empty for none.
+ASSISTANT_EMOJI = os.getenv("LYRA_EMOJI", "🔱")
 # Name shown for the user's lines when the Shortcut doesn't send a speaker.
 USER_NAME = os.getenv("LYRA_USER_NAME", "You")
 # Spoken and texted when a task continues in the background.
@@ -387,7 +389,8 @@ def text_line(who: str, text: str) -> None:
     if outbox is None:
         outbox = asyncio.Queue()
         asyncio.create_task(outbox_worker())
-    outbox.put_nowait(f"{who}: {text.strip()}")
+    prefix = f"{ASSISTANT_EMOJI} " if who == ASSISTANT_NAME and ASSISTANT_EMOJI else ""
+    outbox.put_nowait(f"{prefix}{who}: {text.strip()}")
 
 
 def short(text: str, words: int = 8) -> str:
