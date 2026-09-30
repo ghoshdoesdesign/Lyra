@@ -62,9 +62,10 @@ THINKING = os.getenv("LYRA_THINKING", "low")
 MODEL = os.getenv("LYRA_MODEL", "")
 # How long a voice turn waits for the agent before answering "on it" and
 # letting the task continue in the background. When Siri runs the Shortcut
-# hands-free it abandons a step after roughly 10 seconds ("Something went
-# wrong"), so stay well under that.
-REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "8"))
+# hands-free it abandons a request after only a few seconds; in practice
+# replies that took ~7-8s (plus tunnel latency) never reached the phone, so
+# stay well under that.
+REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "4"))
 
 # Session key prefix; each speaker gets their own conversation.
 SESSION_PREFIX = os.getenv("LYRA_SESSION_PREFIX", "airpods")
@@ -231,7 +232,10 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         )
 
         if proc.returncode != 0:
-            logger.error(f"openclaw error (exit {proc.returncode}): {stderr.decode()[-2000:]}")
+            err = stderr.decode()
+            logger.error(f"openclaw error (exit {proc.returncode}): {err[-2000:]}")
+            if re.search(r"no credits|insufficient_quota|exceeded your current quota|billing", err, re.I):
+                return "Your AI account is out of credits. Add credits on your provider's billing page, then try again."
             return "Sorry, I'm having trouble connecting right now. Try again in a moment."
 
         reply = extract_reply(json.loads(stdout.decode()))
@@ -294,11 +298,15 @@ class Job:
 running_jobs: dict[str, Job] = {}
 # Results of detached jobs, told to the user on their next turn.
 pending_updates: dict[str, list[str]] = {}
+# The most recent background result per session, so "what's the status?" can
+# repeat it if Siri hung up before the result reached the phone.
+last_results: dict[str, str] = {}
 
 
 def start_job(text: str, session_key: str, speaker: str) -> Job:
     job = Job(request=text, task=asyncio.create_task(call_openclaw(text, session_key, speaker)))
     running_jobs[session_key] = job
+    last_results.pop(session_key, None)  # a new request supersedes the old result
 
     def finished(task: asyncio.Task) -> None:
         if running_jobs.get(session_key) is job:
@@ -307,6 +315,7 @@ def start_job(text: str, session_key: str, speaker: str) -> Job:
             result, _ = strip_end_marker(task.result())
             logger.info(f"Background task done: session={session_key} result={result[:50]!r}")
             pending_updates.setdefault(session_key, []).append(result)
+            last_results[session_key] = result
 
     job.task.add_done_callback(finished)
     return job
@@ -387,12 +396,10 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     # The Shortcut checking on a running task: speak the result once it's ready.
     if text == POLL_TEXT:
         if job and not await wait_for_job(job):
-            return respond("Still working on it.", waiting=True)
+            return respond("Still working.", waiting=True)
         results = updates + pending_updates.pop(session_key, [])
-        if not results:
-            return respond("Done.")
-        reply = " ".join(results)
-        return ChatResponse(reply=reply)
+        update_text = ""
+        return respond(" ".join(results) or "Done.")
 
     # A task is still running in the background for this speaker.
     if job:
@@ -412,8 +419,12 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
             return respond("")
 
     # The user is just checking on a task that has since finished.
-    elif updates and STATUS_QUERY.search(text.lower()):
-        return respond("")
+    elif STATUS_QUERY.search(text.lower()):
+        if updates:
+            return respond("")
+        if session_key in last_results:
+            # Repeat it: Siri may have hung up before it was spoken.
+            return respond(f"The latest update: {last_results.pop(session_key)}")
 
     job = start_job(text, session_key, speaker)
     try:

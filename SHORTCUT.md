@@ -44,7 +44,7 @@ End Repeat
 ```
 
 How it works:
-- Lyra answers each request within ~8 seconds, because Siri abandons a hands-free step after ~10 seconds ("Something went wrong").
+- Lyra answers each request within ~4 seconds, because Siri hangs up on slow hands-free requests after only a few seconds.
 - If a task needs longer, Lyra says "On it, one moment" and includes `waiting` in its response. The next loop then **skips "Go on?"** and sends `__lyra_poll__`, so Lyra speaks the result (or a question like "What time?") as soon as it's ready, without you having to ask.
 - `end_conversation` and `waiting` are only present when true; Shortcuts can't reliably compare JSON `true`, but "has any value" always works.
 
