@@ -32,6 +32,7 @@ import os
 import re
 import secrets
 import shutil
+from dataclasses import dataclass, field
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
@@ -50,8 +51,12 @@ ALLOW_NO_AUTH = os.getenv("LYRA_ALLOW_NO_AUTH") == "1"
 
 # OpenClaw settings
 OPENCLAW_AGENT = os.getenv("LYRA_AGENT", "main")
-# Siri gives up on slow requests, so keep turns short.
-OPENCLAW_TIMEOUT = int(os.getenv("LYRA_TIMEOUT", "45"))
+# How long one agent run (a task) may take. Long jobs keep running in the
+# background after the voice turn has been answered.
+TASK_TIMEOUT = int(os.getenv("LYRA_TASK_TIMEOUT", "900"))
+# How long a voice turn waits for the agent before answering "on it" and
+# letting the task continue in the background. Siri gives up on slow requests.
+REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "25"))
 
 # Session key prefix; each speaker gets their own conversation.
 SESSION_PREFIX = os.getenv("LYRA_SESSION_PREFIX", "airpods")
@@ -73,10 +78,32 @@ USER_END_PHRASES = {
     "thank you lyra",
 }
 
+# Things the user can say to stop a running background task.
+USER_CANCEL_PHRASES = {
+    "cancel",
+    "cancel that",
+    "cancel it",
+    "cancel the task",
+    "stop that",
+    "stop the task",
+    "never mind",
+    "nevermind",
+}
+
+# Questions that just ask how a background task is going.
+STATUS_QUERY = re.compile(
+    r"\b(any (update|news|progress)|updates?|status|is it (done|ready|finished)|"
+    r"are you (done|finished)|how('?s| is) it going|what did you find)\b"
+)
+
 VOICE_STYLE_PREFIX = (
-    "[Voice mode via AirPods: reply in 1-3 short spoken sentences, no emojis, "
-    "no markdown, no URLs. If the user is wrapping up or says goodbye, say a "
-    f"brief goodbye and end your reply with {END_MARKER}] "
+    "[Voice mode via AirPods. Actually do what the user asks: use your tools "
+    "(web search, web pages, browser, files, commands, reminders) to complete "
+    "tasks rather than just describing how. Before anything irreversible or "
+    "costly (booking, buying, sending messages, deleting), say what you're about "
+    "to do and ask for a yes first. Reply in 1-3 short spoken sentences, no "
+    "emojis, no markdown, no URLs. If the user is wrapping up or says goodbye, "
+    f"say a brief goodbye and end your reply with {END_MARKER}] "
 )
 
 logging.basicConfig(level=LOG_LEVEL.upper())
@@ -165,7 +192,7 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         "--agent", OPENCLAW_AGENT,
         "--session-key", session_key,
         "--message", f"{VOICE_STYLE_PREFIX}[speaker: {speaker}] {message}",
-        "--timeout", str(OPENCLAW_TIMEOUT),
+        "--timeout", str(TASK_TIMEOUT),
         "--json",
     ]
 
@@ -180,7 +207,7 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(),
-            timeout=OPENCLAW_TIMEOUT + 10,
+            timeout=TASK_TIMEOUT + 10,
         )
 
         if proc.returncode != 0:
@@ -193,11 +220,17 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
             return "I'm not sure how to respond to that."
         return reply
 
+    except asyncio.CancelledError:
+        # The user cancelled the task; stop the agent run (openclaw aborts the
+        # Gateway run on SIGTERM).
+        if proc and proc.returncode is None:
+            proc.terminate()
+        raise
     except asyncio.TimeoutError:
         if proc and proc.returncode is None:
             proc.terminate()
         logger.error("openclaw timed out")
-        return "Sorry, that took too long. Try again?"
+        return "Sorry, that took too long, so I stopped."
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse openclaw response: {e}")
         return "Sorry, something went wrong."
@@ -208,8 +241,7 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
 
 def is_user_goodbye(text: str) -> bool:
     """True when the whole utterance is a sign-off like "goodbye" or "that's all"."""
-    normalized = re.sub(r"[^\w\s'’]", "", text.lower()).strip()
-    return normalized in USER_END_PHRASES
+    return matches(text, USER_END_PHRASES)
 
 
 def strip_end_marker(reply: str) -> tuple[str, bool]:
@@ -217,6 +249,52 @@ def strip_end_marker(reply: str) -> tuple[str, bool]:
     if END_MARKER not in reply:
         return reply, False
     return reply.replace(END_MARKER, "").strip(), True
+
+
+def matches(text: str, phrases: set[str]) -> bool:
+    """True when the whole utterance is one of the given phrases."""
+    normalized = re.sub(r"[^\w\s'’]", "", text.lower()).strip()
+    return normalized in phrases
+
+
+# -----------------------------------------------------------------------------
+# Background tasks
+# -----------------------------------------------------------------------------
+
+@dataclass
+class Job:
+    """One agent run for a speaker, possibly outliving the voice turn."""
+    request: str
+    task: asyncio.Task
+    detached: bool = False  # the voice turn stopped waiting; deliver later
+
+
+# One running job per session: OpenClaw runs one turn per session at a time.
+running_jobs: dict[str, Job] = {}
+# Results of detached jobs, told to the user on their next turn.
+pending_updates: dict[str, list[str]] = {}
+
+
+def start_job(text: str, session_key: str, speaker: str) -> Job:
+    job = Job(request=text, task=asyncio.create_task(call_openclaw(text, session_key, speaker)))
+    running_jobs[session_key] = job
+
+    def finished(task: asyncio.Task) -> None:
+        if running_jobs.get(session_key) is job:
+            del running_jobs[session_key]
+        if job.detached and not task.cancelled():
+            result, _ = strip_end_marker(task.result())
+            logger.info(f"Background task done: session={session_key} result={result[:50]!r}")
+            pending_updates.setdefault(session_key, []).append(result)
+
+    job.task.add_done_callback(finished)
+    return job
+
+
+def short(text: str, words: int = 8) -> str:
+    """First few words of a request, for spoken status messages."""
+    parts = text.split()
+    return " ".join(parts[:words]) + ("…" if len(parts) > words else "")
 
 
 # -----------------------------------------------------------------------------
@@ -244,14 +322,50 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
 
     logger.info(f"Chat request: speaker={speaker} text={text[:50]!r}")
 
-    reply = await call_openclaw(text, get_session_key(speaker), speaker)
+    session_key = get_session_key(speaker)
+    updates = pending_updates.pop(session_key, [])
+    update_text = " ".join(
+        f"Update on your earlier request: {u.rstrip()}{'' if u.rstrip()[-1:] in '.!?' else '.'}"
+        for u in updates
+    )
+
+    def respond(reply: str, end: bool = False) -> ChatResponse:
+        if update_text:
+            reply = f"{update_text} {reply}".strip()
+        logger.info(f"Response: end={end} reply={reply[:50]!r}")
+        return ChatResponse(reply=reply, end_conversation=True if end else None)
+
+    # A task is still running in the background for this speaker.
+    job = running_jobs.get(session_key)
+    if job:
+        if matches(text, USER_CANCEL_PHRASES):
+            job.task.cancel()
+            return respond(f"Okay, I stopped working on {short(job.request)}.")
+        if is_user_goodbye(text):
+            return respond("Okay, I'll keep working on it in the background. Bye!", end=True)
+        return respond(
+            f"I'm still working on {short(job.request)}. "
+            "Ask me again in a minute, or say cancel to stop it."
+        )
+
+    # The user is just checking on a task that has since finished.
+    if updates and STATUS_QUERY.search(text.lower()):
+        return respond("")
+
+    job = start_job(text, session_key, speaker)
+    try:
+        reply = await asyncio.wait_for(asyncio.shield(job.task), timeout=REPLY_WAIT)
+    except asyncio.TimeoutError:
+        job.detached = True
+        logger.info(f"Task continues in background: session={session_key}")
+        return respond(
+            "I'm on it. This will take a little while. Ask me for an update in a "
+            "minute, or come back later."
+        )
+
     reply, agent_ended = strip_end_marker(reply)
     end_conversation = agent_ended or is_user_goodbye(text)
-    if not reply:
-        reply = "Goodbye!"
-
-    logger.info(f"Response: end={end_conversation} reply={reply[:50]!r}")
-    return ChatResponse(reply=reply, end_conversation=True if end_conversation else None)
+    return respond(reply or "Goodbye!", end=end_conversation)
 
 
 # -----------------------------------------------------------------------------

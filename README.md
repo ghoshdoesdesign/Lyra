@@ -108,11 +108,22 @@ Set these in `/etc/lyra/lyra.env` on the server:
 |---|---|---|
 | `LYRA_API_TOKEN` | (generated) | Bearer token the Shortcut must send (required) |
 | `LYRA_AGENT` | `main` | OpenClaw agent id |
-| `LYRA_TIMEOUT` | `45` | Seconds per agent turn (Siri gives up on slow requests) |
+| `LYRA_REPLY_WAIT` | `25` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
+| `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
 
 ## Limitations
 - The phrase is **"Hey Siri, it's showtime"**, not "Hey Lyra". iOS doesn't allow custom wake words without an app.
 - **Siri may confuse the name.** It might mistake "it's showtime" for the Showtime or Paramount+ app or a song. If so, rename the Shortcut to something more distinctive (e.g. "Lyra showtime").
-- **Turns are capped at 45 seconds.** Long tasks such as bookings that take minutes need a follow-up feature (background jobs plus a notification), which isn't built yet.
+- **Long tasks run in the background.** If a task takes more than ~25 seconds, Lyra says "I'm on it" and keeps working. Ask "any update?" (or just start a new conversation later) and it tells you the result. Say "cancel" to stop it. There's no push notification yet, so you hear the result the next time you talk to Lyra.
+
+## Getting Lyra to do work
+
+Lyra runs on OpenClaw with its full tool set: web search (via your model provider), fetching web pages, a browser it can operate, files, shell commands and scheduled jobs. It's told to actually do tasks, and to ask for a "yes" before anything irreversible like booking, buying or sending a message. Things to try:
+
+- "Find three well-reviewed Thai restaurants near Union Square open tonight and tell me which takes reservations."
+- "Research the cheapest nonstop flights from SFO to New York next Friday."
+- "Make a packing list for a 3-day ski trip and save it to a file on my Mac."
+
+Real bookings through a browser work only on sites that allow it without a login or CAPTCHA, and are slow. Start with research tasks.

@@ -153,7 +153,6 @@ LYRA_API_TOKEN=$(openssl rand -hex 24)
 LYRA_HOST=127.0.0.1
 LYRA_PORT=7001
 LYRA_AGENT=main
-LYRA_TIMEOUT=45
 EOF
 fi
 chown root:"$LYRA_USER" "$ENV_FILE"
