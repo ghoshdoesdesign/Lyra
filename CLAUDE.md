@@ -19,5 +19,5 @@ Voice access to an OpenClaw agent through AirPods, adapted from https://github.c
 - The server is internet-facing: keep bearer-token auth mandatory (`LYRA_API_TOKEN`).
 - `openclaw agent --json` returns top-level `payloads`; `extract_reply` also accepts the older `result.payloads` shape.
 - The agent signals the end of a conversation with the `[END]` marker, which is stripped before speaking.
-- Long tasks: `/chat` waits `LYRA_REPLY_WAIT` (25s) for the agent, then answers "I'm on it" and keeps the run going as a background job (one per session; OpenClaw runs one turn per session). Results are prepended to the speaker's next reply; "cancel" terminates the run. Keep voice turns under Siri's request timeout.
+- Long tasks: `/chat` waits `LYRA_REPLY_WAIT` (8s; Siri abandons hands-free Shortcut steps after ~10s) for the agent, then answers "I'm on it" and keeps the run going as a background job (one per session; OpenClaw runs one turn per session). Results are prepended to the speaker's next reply; "cancel" terminates the run. Keep voice turns under Siri's request timeout.
 - `/chat` includes `end_conversation: true` only when the conversation is over and omits it otherwise; the Shortcut tests it with "has any value" (Shortcuts can't reliably compare JSON booleans). Keep it that way.

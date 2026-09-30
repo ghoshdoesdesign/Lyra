@@ -55,8 +55,10 @@ OPENCLAW_AGENT = os.getenv("LYRA_AGENT", "main")
 # background after the voice turn has been answered.
 TASK_TIMEOUT = int(os.getenv("LYRA_TASK_TIMEOUT", "900"))
 # How long a voice turn waits for the agent before answering "on it" and
-# letting the task continue in the background. Siri gives up on slow requests.
-REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "25"))
+# letting the task continue in the background. When Siri runs the Shortcut
+# hands-free it abandons a step after roughly 10 seconds ("Something went
+# wrong"), so stay well under that.
+REPLY_WAIT = float(os.getenv("LYRA_REPLY_WAIT", "8"))
 
 # Session key prefix; each speaker gets their own conversation.
 SESSION_PREFIX = os.getenv("LYRA_SESSION_PREFIX", "airpods")
@@ -369,8 +371,7 @@ async def chat(request: ChatRequest, _: None = Depends(require_auth)):
         job.detached = True
         logger.info(f"Task continues in background: session={session_key}")
         return respond(
-            "I'm on it. This will take a little while. Ask me for an update in a "
-            "minute, or come back later."
+            "I'm on it. Ask me for an update in a minute."
         )
 
     reply, agent_ended = strip_end_marker(reply)

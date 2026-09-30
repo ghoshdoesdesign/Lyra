@@ -108,7 +108,7 @@ Set these in `/etc/lyra/lyra.env` on the server:
 |---|---|---|
 | `LYRA_API_TOKEN` | (generated) | Bearer token the Shortcut must send (required) |
 | `LYRA_AGENT` | `main` | OpenClaw agent id |
-| `LYRA_REPLY_WAIT` | `25` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
+| `LYRA_REPLY_WAIT` | `8` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
 | `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
 | `LYRA_SESSION_PREFIX` | `airpods` | Session key prefix; each speaker gets `airpods-<name>` |
 | `LYRA_HOST` / `LYRA_PORT` | `127.0.0.1` / `7001` | Bind address (Caddy proxies to it) |
@@ -116,7 +116,7 @@ Set these in `/etc/lyra/lyra.env` on the server:
 ## Limitations
 - The phrase is **"Hey Siri, it's showtime"**, not "Hey Lyra". iOS doesn't allow custom wake words without an app.
 - **Siri may confuse the name.** It might mistake "it's showtime" for the Showtime or Paramount+ app or a song. If so, rename the Shortcut to something more distinctive (e.g. "Lyra showtime").
-- **Long tasks run in the background.** If a task takes more than ~25 seconds, Lyra says "I'm on it" and keeps working. Ask "any update?" (or just start a new conversation later) and it tells you the result. Say "cancel" to stop it. There's no push notification yet, so you hear the result the next time you talk to Lyra.
+- **Long tasks run in the background.** If a task takes more than ~8 seconds, Lyra says "I'm on it" and keeps working. Ask "any update?" (or just start a new conversation later) and it tells you the result. Say "cancel" to stop it. There's no push notification yet, so you hear the result the next time you talk to Lyra.
 
 ## Getting Lyra to do work
 
