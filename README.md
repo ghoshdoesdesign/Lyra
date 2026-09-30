@@ -49,20 +49,24 @@ On the first run it installs OpenClaw (and Node.js if needed), asks once for you
 - On first run, macOS may ask to allow incoming connections for Python. Click **Allow**.
 - For an always-on, fixed URL, move to a server (below). Your Shortcut then only needs its URL and token changed.
 
-## iMessage transcripts (laptop mode)
+## Results and transcripts on WhatsApp
 
-Lyra can text you through OpenClaw's built-in iMessage channel:
+Lyra texts you through OpenClaw's built-in WhatsApp channel:
 - **✅ each background task's result** the moment it's done (so you get it even if Siri hung up), and
 - **the full conversation transcript** when you say goodbye, or after 3 minutes of silence.
 
-One-time setup on the Mac signed in to Messages:
+This works both on your laptop and on the always-on server. One-time setup:
 
 ```bash
-./local/setup_imessage.sh        # asks for your phone number or Apple ID email
-./local/start.sh --tunnel        # restart Lyra
+./local/setup_whatsapp.sh          # laptop
+sudo ./local/setup_whatsapp.sh     # cloud server (run from the repo on the server)
 ```
 
-The script installs `imsg` (OpenClaw's bridge to Messages.app) and the iMessage plugin, configures the channel so only your number can message the agent, walks you through Full Disk Access and Automation, and sends a test text. The number is stored in `~/.lyra/lyra.env` as `LYRA_IMESSAGE_TO`, not in the repo. This needs macOS, so it isn't available on a Linux server.
+It asks for your WhatsApp number, installs OpenClaw's WhatsApp plugin, lets only your number message the agent, shows a QR code to scan (WhatsApp → Settings → Linked Devices), and sends a test message. On a laptop, restart Lyra afterwards; the server script restarts it for you. The number is stored in `lyra.env`, not in the repo.
+
+**Use a separate WhatsApp number for Lyra if you can.** Texts then arrive as normal notifications, which iOS can read aloud in your AirPods, and you can reply to chat with Lyra. With your own number they land in "Message yourself", usually without a notification.
+
+On a Mac you can use iMessage instead: `./local/setup_imessage.sh` (macOS only, so not available on the server).
 
 ## Server setup: always on (about 20 minutes)
 
@@ -126,7 +130,7 @@ Set these in `/etc/lyra/lyra.env` on the server:
 | `LYRA_REPLY_WAIT` | `4` | Seconds a voice turn waits before answering "I'm on it" and letting the task continue in the background |
 | `LYRA_TASK_TIMEOUT` | `900` | Max seconds for one task (agent run) |
 | `LYRA_THINKING` | `low` | Model thinking level per step (`off`, `minimal`, `low`, `medium`, `high`, …). Lower is faster; empty uses OpenClaw's default |
-| `LYRA_IMESSAGE_TO` | (off) | iMessage handle for results and transcripts (set by `local/setup_imessage.sh`) |
+| `LYRA_NOTIFY_CHANNEL` / `LYRA_NOTIFY_TO` | (off) | OpenClaw channel (`whatsapp`, `imessage`, …) and recipient for texted results and transcripts (set by `local/setup_whatsapp.sh`) |
 | `LYRA_TRANSCRIPT_IDLE` | `180` | Seconds of silence before the transcript is texted |
 | `LYRA_NAME` | `Lyra` | Assistant name used in transcripts |
 | `LYRA_MODEL` | (OpenClaw default) | Optional faster model for voice, e.g. one from `openclaw models list` |

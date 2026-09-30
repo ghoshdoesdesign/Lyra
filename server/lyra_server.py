@@ -318,7 +318,7 @@ def start_job(text: str, session_key: str, speaker: str) -> Job:
             last_results[session_key] = result
             # Text the result right away, in case Siri hung up before speaking it.
             record(session_key, ASSISTANT_NAME, result)
-            asyncio.create_task(send_imessage(f"✅ {ASSISTANT_NAME}: {result}"))
+            asyncio.create_task(send_text(f"✅ {ASSISTANT_NAME}: {result}"))
             schedule_idle_flush(session_key)
 
     job.task.add_done_callback(finished)
@@ -326,11 +326,16 @@ def start_job(text: str, session_key: str, speaker: str) -> Job:
 
 
 # -----------------------------------------------------------------------------
-# iMessage transcripts (via OpenClaw's iMessage channel)
+# Texted results and transcripts (via an OpenClaw channel: WhatsApp, iMessage…)
 # -----------------------------------------------------------------------------
 
-# iMessage handle to send to (phone number or Apple ID email); empty disables.
-IMESSAGE_TO = os.getenv("LYRA_IMESSAGE_TO", "").strip()
+# Where to text results and transcripts; empty disables. LYRA_IMESSAGE_TO is
+# the older iMessage-only setting and still works.
+NOTIFY_TO = (os.getenv("LYRA_NOTIFY_TO") or os.getenv("LYRA_IMESSAGE_TO", "")).strip()
+NOTIFY_CHANNEL = (
+    os.getenv("LYRA_NOTIFY_CHANNEL")
+    or ("imessage" if os.getenv("LYRA_IMESSAGE_TO") else "whatsapp")
+).strip()
 ASSISTANT_NAME = os.getenv("LYRA_NAME", "Lyra")
 # Send the transcript after this many seconds without activity, in case the
 # conversation ended without a goodbye (e.g. Siri hung up).
@@ -340,31 +345,31 @@ transcripts: dict[str, list[str]] = {}
 idle_flushes: dict[str, asyncio.Task] = {}
 
 
-async def send_imessage(text: str) -> None:
-    """Send text to IMESSAGE_TO through `openclaw message send`."""
-    if not IMESSAGE_TO:
+async def send_text(text: str) -> None:
+    """Text NOTIFY_TO on NOTIFY_CHANNEL through `openclaw message send`."""
+    if not NOTIFY_TO:
         return
     try:
         proc = await asyncio.create_subprocess_exec(
             find_openclaw(), "message", "send",
-            "--channel", "imessage",
-            "--target", IMESSAGE_TO,
+            "--channel", NOTIFY_CHANNEL,
+            "--target", NOTIFY_TO,
             "--message", text,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         if proc.returncode != 0:
-            logger.error(f"iMessage send failed (exit {proc.returncode}): {stderr.decode()[-1000:]}")
+            logger.error(f"{NOTIFY_CHANNEL} send failed (exit {proc.returncode}): {stderr.decode()[-1000:]}")
         else:
-            logger.info(f"iMessage sent ({len(text)} chars)")
+            logger.info(f"{NOTIFY_CHANNEL} message sent ({len(text)} chars)")
     except Exception as e:
-        logger.error(f"iMessage send failed: {e}")
+        logger.error(f"{NOTIFY_CHANNEL} send failed: {e}")
 
 
 def record(session_key: str, who: str, text: str) -> None:
     """Add a line to the session's transcript."""
-    if IMESSAGE_TO and text.strip():
+    if NOTIFY_TO and text.strip():
         transcripts.setdefault(session_key, []).append(f"{who}: {text.strip()}")
 
 
@@ -373,12 +378,12 @@ async def flush_transcript(session_key: str) -> None:
     lines = transcripts.pop(session_key, [])
     if lines:
         header = f"🗣 {ASSISTANT_NAME} conversation, {time.strftime('%b %d, %I:%M %p')}"
-        await send_imessage("\n".join([header, *lines]))
+        await send_text("\n".join([header, *lines]))
 
 
 def schedule_idle_flush(session_key: str) -> None:
     """(Re)start the timer that sends the transcript after inactivity."""
-    if not IMESSAGE_TO:
+    if not NOTIFY_TO:
         return
     old = idle_flushes.pop(session_key, None)
     if old:
