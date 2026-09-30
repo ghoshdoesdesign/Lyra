@@ -301,6 +301,16 @@ def short(text: str, words: int = 8) -> str:
 # Endpoints
 # -----------------------------------------------------------------------------
 
+@app.get("/")
+async def root():
+    """Friendly answer for people opening the server URL in a browser."""
+    return {
+        "service": "lyra",
+        "status": "running",
+        "hint": "Lyra is up. The Shortcut should use this address with /chat at the end.",
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint (no auth required)."""
