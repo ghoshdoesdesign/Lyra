@@ -232,8 +232,16 @@ async def call_openclaw(message: str, session_key: str, speaker: str) -> str:
         )
 
         if proc.returncode != 0:
-            err = stderr.decode()
-            logger.error(f"openclaw error (exit {proc.returncode}): {err[-2000:]}")
+            # With --json, OpenClaw puts its error envelope ({"ok": false,
+            # "error": {...}}) on stdout; stderr may be empty.
+            out = stdout.decode()
+            try:
+                detail = json.loads(out).get("error") or {}
+                reason = detail.get("message") if isinstance(detail, dict) else str(detail)
+            except (json.JSONDecodeError, AttributeError):
+                reason = ""
+            err = "\n".join(x for x in (stderr.decode().strip(), reason or out.strip()) if x)
+            logger.error(f"openclaw error (exit {proc.returncode}): {err[-2000:] or '(no details)'}")
             if re.search(r"no credits|insufficient.credits|insufficient_quota|exceeded your current quota|billing|\b402\b", err, re.I):
                 return "Your AI account is out of credits. Add credits on your provider's billing page, then try again."
             return "Sorry, I'm having trouble connecting right now. Try again in a moment."
