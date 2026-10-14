@@ -454,6 +454,7 @@ async def health():
     return {"status": "healthy", "service": "lyra"}
 
 
+@app.post("/", response_model=ChatResponse, response_model_exclude_none=True)  # tolerate a Shortcut URL missing /chat
 @app.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat(request: ChatRequest, _: None = Depends(require_auth)):
     """
